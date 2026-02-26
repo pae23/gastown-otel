@@ -511,7 +511,9 @@ function applyFilters(){
   buildAllEvents();
   computeFullRange();
   vStart=fullStart; vEnd=fullEnd;
+  var savedType=document.getElementById('f-type').value;
   populateTypeFilter();
+  document.getElementById('f-type').value=savedType;
   renderTable();
   drawOverview();
 }
