@@ -61,19 +61,18 @@ const tmplWaterfallV2 = `
 
 <div class="wf2-toolbar">
   <label>Rig</label>
-  <select id="f-rig"><option value="">All rigs</option></select>
+  <select id="f-rig" onchange="applyFilters()"><option value="">All rigs</option></select>
   <label>Role</label>
-  <select id="f-role">
+  <select id="f-role" onchange="applyFilters()">
     <option value="">All roles</option>
     <option>mayor</option><option>deacon</option><option>witness</option>
     <option>refinery</option><option>polecat</option><option>dog</option>
     <option>boot</option><option>crew</option>
   </select>
   <label>Type</label>
-  <select id="f-type"><option value="">All types</option></select>
+  <select id="f-type" onchange="applyFilters()"><option value="">All types</option></select>
   <label>Search</label>
-  <input type="text" id="f-search" placeholder="agent, bead ID…" style="width:140px">
-  <button onclick="applyFilters()">Apply</button>
+  <input type="text" id="f-search" placeholder="agent, bead ID…" style="width:140px" oninput="applyFilters()">
   <button class="sec" onclick="resetFilters()">Reset</button>
   <span style="flex:1"></span>
   <span class="wf-row-count" id="wf-row-count">—</span>
