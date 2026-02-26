@@ -99,9 +99,9 @@ const tmplWaterfallV2 = `
         <tr>
           <th style="width:64px">Time</th>
           <th style="width:140px">Type</th>
-          <th style="width:110px">Agent</th>
-          <th style="width:80px">Role</th>
           <th style="width:72px">Rig</th>
+          <th style="width:80px">Role</th>
+          <th style="width:110px">Agent</th>
           <th>Detail</th>
           <th style="width:54px">Dur</th>
           <th style="width:110px">Waterfall</th>
@@ -277,9 +277,9 @@ function renderTable(){
     html+='<tr class="wf-row'+(ev.severity==='error'?' err-row':'')+(isSel?' wf-sel':'')+'" data-i="'+i+'">'
       +'<td class="mono dim" style="font-size:10px">'+ts+'</td>'
       +'<td>'+evBadge(ev.body)+'</td>'
-      +'<td class="mono" title="'+esc(run.agent_name||run.role||'')+'"><span style="color:'+rc(run.role)+'">'+esc(agentLabel)+'</span></td>'
-      +'<td><span style="color:'+rc(run.role)+';font-size:10px;font-family:monospace">'+esc(run.role||'')+'</span></td>'
       +'<td class="mono dim" style="font-size:10px">'+esc(row.rigName||'')+'</td>'
+      +'<td><span style="color:'+rc(run.role)+';font-size:10px;font-family:monospace">'+esc(run.role||'')+'</span></td>'
+      +'<td class="mono" title="'+esc(run.agent_name||run.role||'')+'"><span style="color:'+rc(run.role)+'">'+esc(agentLabel)+'</span></td>'
       +'<td class="mono">'+evDetail(ev)+'</td>'
       +'<td class="mono dim" style="font-size:10px">'+dur+'</td>'
       +'<td>'+makeWfBar(ev,range)+'</td>'
