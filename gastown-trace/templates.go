@@ -91,6 +91,8 @@ details pre{margin-top:4px;background:#0d1117;padding:8px;border-radius:4px;bord
 <body>
 <nav>
   <span class="brand">🏙 Gastown Trace</span>
+  <a href="/waterfall">Waterfall</a>
+  {{- /*
   <a href="/">Dashboard</a>
   <a href="/flow">Flow</a>
   <a href="/sessions">Sessions</a>
@@ -100,6 +102,7 @@ details pre{margin-top:4px;background:#0d1117;padding:8px;border-radius:4px;bord
   <a href="/tools">Tools</a>
   <a href="/costs">Costs</a>
   <a href="/live-view">Live</a>
+  */ -}}
   <div class="win-sel">
     <a href="?window=1h" {{if eq .Window "1h"}}class="active"{{end}}>1h</a>
     <a href="?window=" {{if eq .Window ""}}class="active"{{end}}>24h</a>
