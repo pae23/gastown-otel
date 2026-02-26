@@ -19,6 +19,7 @@ const tmplWaterfallV2 = `
 #wf-canvas{display:block}
 #wf-tooltip{position:fixed;background:#1c2128;border:1px solid #30363d;padding:8px 10px;border-radius:4px;font-size:11px;color:#c9d1d9;pointer-events:none;display:none;z-index:200;max-width:240px;line-height:1.6;box-shadow:0 4px 12px rgba(0,0,0,.5)}
 #wf-detail{display:none;flex-direction:column;border:1px solid #30363d;border-radius:4px;max-height:40vh;overflow:hidden;margin-top:8px}
+#wf-detail-content{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
 .wf2-dhdr{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#161b22;border-bottom:1px solid #30363d;font-size:12px;flex-wrap:wrap;gap:6px}
 .wf2-dhdr button{background:#21262d;border:1px solid #30363d;color:#c9d1d9;padding:2px 8px;border-radius:4px;cursor:pointer;font-size:11px}
 .wf2-devents{overflow-y:auto;padding:0 8px 8px;flex:1;min-height:0}
