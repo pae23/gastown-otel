@@ -14,12 +14,19 @@ const tmplWaterfallV2 = `
 .wf2-card-val{font-size:22px;font-weight:700;color:#c9d1d9;font-family:monospace}
 .wf2-card-lbl{font-size:10px;color:#8b949e;text-transform:uppercase;letter-spacing:.5px}
 .wf2-instance{font-size:11px;color:#58a6ff;margin-bottom:6px}
-#wf-outer{position:relative}
-#wf-wrap{overflow-y:auto;overflow-x:hidden;max-height:60vh;border:1px solid #30363d;border-radius:4px;background:#0d1117;cursor:crosshair}
+#wf-ov-wrap{border:1px solid #30363d;border-radius:4px;background:#0d1117;margin-bottom:4px;cursor:crosshair;overflow:hidden;user-select:none;position:relative}
+#wf-ov{display:block}
+#wf-outer{position:relative;display:flex;align-items:flex-start;gap:8px}
+#wf-wrap{flex:1;min-width:0;overflow-y:auto;overflow-x:hidden;max-height:60vh;border:1px solid #30363d;border-radius:4px;background:#0d1117;cursor:crosshair}
 #wf-canvas{display:block}
 #wf-tooltip{position:fixed;background:#1c2128;border:1px solid #30363d;padding:8px 10px;border-radius:4px;font-size:11px;color:#c9d1d9;pointer-events:none;display:none;z-index:200;max-width:240px;line-height:1.6;box-shadow:0 4px 12px rgba(0,0,0,.5)}
-#wf-detail{display:none;flex-direction:column;border:1px solid #30363d;border-radius:4px;max-height:40vh;overflow:hidden;margin-top:8px}
+#wf-detail{display:none;flex-direction:column;width:360px;min-width:280px;flex-shrink:0;border:1px solid #30363d;border-radius:4px;max-height:60vh;overflow:hidden}
 #wf-detail-content{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
+.wf2-tabs{display:flex;border-bottom:1px solid #30363d;flex-shrink:0;overflow-x:auto}
+.wf2-tab{background:transparent;border:none;border-bottom:2px solid transparent;color:#8b949e;padding:6px 10px;cursor:pointer;font-size:11px;white-space:nowrap;font-family:monospace}
+.wf2-tab:hover{color:#c9d1d9}
+.wf2-tab.active{color:#58a6ff;border-bottom-color:#58a6ff;background:#0d111766}
+.wf2-hl td{background:#1f6feb22!important}.wf2-hl td:first-child{border-left:2px solid #58a6ff}
 .wf2-dhdr{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#161b22;border-bottom:1px solid #30363d;font-size:12px;flex-wrap:wrap;gap:6px}
 .wf2-dhdr button{background:#21262d;border:1px solid #30363d;color:#c9d1d9;padding:2px 8px;border-radius:4px;cursor:pointer;font-size:11px}
 .wf2-devents{overflow-y:auto;padding:0 8px 8px;flex:1;min-height:0}
@@ -93,13 +100,14 @@ const tmplWaterfallV2 = `
   <span class="wf2-leg" style="color:#10b981">— spawn</span>
 </div>
 
+<div id="wf-ov-wrap"><canvas id="wf-ov"></canvas></div>
+
 <div id="wf-outer">
   <div id="wf-wrap"><canvas id="wf-canvas"></canvas></div>
+  <div id="wf-detail">
+    <div id="wf-detail-content"></div>
+  </div>
   <div id="wf-tooltip"></div>
-</div>
-
-<div id="wf-detail">
-  <div id="wf-detail-content"></div>
 </div>
 
 <div class="section" style="margin-top:12px">
@@ -137,10 +145,13 @@ function rc(role){ return ROLE_CLR[role]||'#9ca3af'; }
 
 // ── State ─────────────────────────────────────────────────────────────────────
 var vStart=0, vEnd=0;
+var fullStart=0, fullEnd=0;
 var rows=[];
 var collapsed=new Set();
 var canvas, ctx, wrap, tip, detPanel, detContent;
+var ovCanvas, ovCtx;
 var dragging=false, dragX0=0, dragVS0=0, dragVE0=0;
+var ovDrag=false, ovDragMode=null, ovDragX0=0, ovDragVS0=0, ovDragVE0=0;
 var hovered=null;
 // current filter state (applied in-memory on DATA copy)
 var filteredData = null;
@@ -153,6 +164,12 @@ function init(){
   tip        = document.getElementById('wf-tooltip');
   detPanel   = document.getElementById('wf-detail');
   detContent = document.getElementById('wf-detail-content');
+  ovCanvas   = document.getElementById('wf-ov');
+  ovCtx      = ovCanvas.getContext('2d');
+  var ovWrap = document.getElementById('wf-ov-wrap');
+  ovCanvas.width  = ovWrap.clientWidth||900;
+  ovCanvas.height = 52;
+  ovWrap.style.height = '52px';
 
   filteredData = DATA;
 
@@ -173,6 +190,7 @@ function init(){
   // Apply filters if any are set
   applyFiltersLocal();
   computeTimeRange();
+  computeFullRange();
   updateSummary();
   rebuildRows();
   buildCommMap();
@@ -182,11 +200,15 @@ function init(){
   canvas.addEventListener('click', onClick);
   canvas.addEventListener('wheel', onWheel, {passive:false});
   canvas.addEventListener('mousedown', onDown);
+  ovCanvas.addEventListener('mousedown', onOvDown);
+  ovCanvas.addEventListener('mousemove', onOvMove);
+  ovCanvas.addEventListener('mouseleave', function(){ ovCanvas.style.cursor='crosshair'; });
   window.addEventListener('mousemove', onWinMove);
   window.addEventListener('mouseup', onUp);
   window.addEventListener('resize', onResize);
+  window.addEventListener('keydown', function(e){ if(e.key==='Escape') closeDetail(); });
 
-  requestAnimationFrame(draw);
+  requestAnimationFrame(function(){ draw(); drawOverview(); });
 }
 
 function applyFiltersLocal(){
@@ -256,7 +278,11 @@ function rebuildRows(){
   ctx = canvas.getContext('2d');
 }
 
-function onResize(){ rebuildRows(); draw(); }
+function onResize(){
+  var ovWrap=document.getElementById('wf-ov-wrap');
+  if(ovWrap){ ovCanvas.width=ovWrap.clientWidth||900; }
+  rebuildRows(); draw(); drawOverview();
+}
 
 // ── Drawing ───────────────────────────────────────────────────────────────────
 function draw(){
@@ -468,6 +494,130 @@ function drawComms(W){
   ctx.lineWidth=1;
 }
 
+// ── Overview timeline ─────────────────────────────────────────────────────────
+function computeFullRange(){
+  var mn=Infinity, mx=-Infinity;
+  for(var i=0;i<filteredData.rigs.length;i++){
+    var rig=filteredData.rigs[i];
+    for(var j=0;j<rig.runs.length;j++){
+      var run=rig.runs[j];
+      var st=new Date(run.started_at).getTime();
+      var et=run.ended_at?new Date(run.ended_at).getTime():Date.now();
+      if(st<mn) mn=st;
+      if(et>mx) mx=et;
+    }
+  }
+  if(!isFinite(mn)){mn=Date.now()-3600000; mx=Date.now();}
+  var pad=(mx-mn)*0.04||5000;
+  fullStart=mn-pad; fullEnd=mx+pad;
+}
+
+function ovX(t){ return ((t-fullStart)/(fullEnd-fullStart))*ovCanvas.width; }
+function ovT(x){ return fullStart+(x/ovCanvas.width)*(fullEnd-fullStart); }
+
+function drawOverview(){
+  var W=ovCanvas.width, H=ovCanvas.height;
+  if(!W||!H) return;
+  ovCtx.fillStyle='#0d1117';
+  ovCtx.fillRect(0,0,W,H);
+
+  // Collect all runs
+  var allRuns=[];
+  for(var i=0;i<filteredData.rigs.length;i++)
+    for(var j=0;j<filteredData.rigs[i].runs.length;j++)
+      allRuns.push(filteredData.rigs[i].runs[j]);
+
+  // Draw micro bars (stacked lanes, barZone = top 38px)
+  var barZone=H-14;
+  var laneH=allRuns.length>0?Math.max(1.5,Math.min(7,barZone/allRuns.length)):4;
+  for(var k=0;k<allRuns.length;k++){
+    var run=allRuns[k];
+    var st=new Date(run.started_at).getTime();
+    var et=run.ended_at?new Date(run.ended_at).getTime():fullEnd;
+    var x1=ovX(st), x2=Math.max(x1+1,ovX(et));
+    var y=2+k*laneH;
+    if(y>barZone) break;
+    ovCtx.fillStyle=rc(run.role)+'99';
+    ovCtx.fillRect(x1,y,x2-x1,laneH-0.5);
+  }
+
+  // Dim regions outside selection
+  var sx1=ovX(vStart), sx2=ovX(vEnd);
+  ovCtx.fillStyle='rgba(0,0,0,0.55)';
+  if(sx1>0) ovCtx.fillRect(0,0,sx1,H);
+  if(sx2<W) ovCtx.fillRect(sx2,0,W-sx2,H);
+
+  // Selection border
+  ovCtx.strokeStyle='#58a6ff';
+  ovCtx.lineWidth=1;
+  ovCtx.strokeRect(sx1+0.5,0.5,Math.max(2,sx2-sx1)-1,H-1);
+
+  // Handle grips
+  ovCtx.fillStyle='#58a6ff';
+  ovCtx.fillRect(sx1-1,0,3,H);
+  ovCtx.fillRect(sx2-2,0,3,H);
+
+  // Mini ruler at bottom
+  var iv=niceInterval(fullEnd-fullStart,W);
+  var first=Math.ceil(fullStart/iv)*iv;
+  ovCtx.fillStyle='#8b949e'; ovCtx.font='8px monospace'; ovCtx.textAlign='center';
+  for(var t=first;t<=fullEnd;t+=iv){
+    var x=ovX(t);
+    ovCtx.fillStyle='#30363d'; ovCtx.fillRect(x,H-14,1,4);
+    ovCtx.fillStyle='#8b949e'; ovCtx.fillText(rulerLabel(t),x,H-1);
+  }
+}
+
+function onOvMove(e){
+  var r=ovCanvas.getBoundingClientRect();
+  var x=e.clientX-r.left;
+  var W=ovCanvas.width;
+  var sx1=ovX(vStart), sx2=ovX(vEnd);
+  if(Math.abs(x-sx1)<8||Math.abs(x-sx2)<8) ovCanvas.style.cursor='ew-resize';
+  else if(x>sx1&&x<sx2) ovCanvas.style.cursor='grab';
+  else ovCanvas.style.cursor='crosshair';
+}
+
+function onOvDown(e){
+  var r=ovCanvas.getBoundingClientRect();
+  var x=e.clientX-r.left;
+  var W=ovCanvas.width;
+  var sx1=ovX(vStart), sx2=ovX(vEnd);
+  if(Math.abs(x-sx1)<8){
+    ovDragMode='left';
+  } else if(Math.abs(x-sx2)<8){
+    ovDragMode='right';
+  } else if(x>sx1&&x<sx2){
+    ovDragMode='pan';
+  } else {
+    // click outside: center view on click point
+    var t=ovT(x);
+    var half=(vEnd-vStart)/2;
+    vStart=t-half; vEnd=t+half;
+    draw(); drawOverview(); return;
+  }
+  ovDrag=true; ovDragX0=x; ovDragVS0=vStart; ovDragVE0=vEnd;
+  ovCanvas.style.cursor='grabbing';
+  e.preventDefault();
+}
+
+window.addEventListener('mousemove', function(e){
+  if(!ovDrag) return;
+  var r=ovCanvas.getBoundingClientRect();
+  var x=e.clientX-r.left;
+  var W=ovCanvas.width;
+  var dt=(x-ovDragX0)/W*(fullEnd-fullStart);
+  if(ovDragMode==='pan'){
+    vStart=ovDragVS0+dt; vEnd=ovDragVE0+dt;
+  } else if(ovDragMode==='left'){
+    vStart=Math.min(ovDragVS0+dt, ovDragVE0-1000);
+  } else {
+    vEnd=Math.max(ovDragVE0+dt, ovDragVS0+1000);
+  }
+  draw(); drawOverview();
+});
+window.addEventListener('mouseup', function(){ if(ovDrag){ ovDrag=false; ovCanvas.style.cursor='crosshair'; } });
+
 // ── Hit test ──────────────────────────────────────────────────────────────────
 function hitTest(x,y){
   var ry=RULH;
@@ -545,7 +695,7 @@ function onWheel(e){
   var range=(vEnd-vStart)*factor;
   var ratio=(t-vStart)/(vEnd-vStart);
   vStart=t-ratio*range; vEnd=t+(1-ratio)*range;
-  draw();
+  draw(); drawOverview();
 }
 function onDown(e){
   var r=canvas.getBoundingClientRect();
@@ -559,7 +709,7 @@ function onWinMove(e){
   var avail=canvas.width-LW;
   var dT=dx/avail*(dragVE0-dragVS0);
   vStart=dragVS0-dT; vEnd=dragVE0-dT;
-  draw();
+  draw(); drawOverview();
 }
 function onUp(){ dragging=false; canvas.style.cursor='crosshair'; }
 
@@ -603,6 +753,8 @@ function showTip(e,item){
 function hideTip(){ tip.style.display='none'; }
 
 // ── Detail panel ──────────────────────────────────────────────────────────────
+var panelRun=null, panelFilter='all', panelHighlight=null;
+
 function evBadge(body){
   var m={
     'agent.event':'ev-agent','claude_code.api_request':'ev-api',
@@ -637,64 +789,79 @@ function evDetail(ev){
 
 function ato(a,k){ return a[k]||''; }
 
-function showDetail(run){
+function openPanel(run, filter, highlightId){
+  panelRun=run; panelFilter=filter||'all'; panelHighlight=highlightId||null;
+  renderPanel();
+  detPanel.style.display='flex';
+  rebuildRows(); draw();
+}
+
+function renderPanel(){
+  var run=panelRun;
+  var evs=run.events||[];
+  var apiN=evs.filter(function(e){return e.body==='claude_code.api_request';}).length;
+  var toolN=evs.filter(function(e){return e.body==='claude_code.tool_result';}).length;
+  var commN=evs.filter(function(e){
+    return e.body==='sling'||e.body==='mail'||e.body==='nudge'||e.body==='done'||e.body==='agent.event';
+  }).length;
   var dur=run.duration_ms?fmtMs(run.duration_ms):(run.running?'running':'—');
-  var html='<div class="wf2-dhdr">'
+
+  var tabs=[['all','All ('+evs.length+')'],['api','API ('+apiN+')'],['tool','Tools ('+toolN+')'],['comm','Comms ('+commN+')']];
+  var tabHtml='<div class="wf2-tabs">';
+  for(var i=0;i<tabs.length;i++){
+    var t=tabs[i][0];
+    tabHtml+='<button class="wf2-tab'+(panelFilter===t?' active':'')+'" onclick="switchTab(\''+t+'\')">'+tabs[i][1]+'</button>';
+  }
+  tabHtml+='</div>';
+
+  var filtered=panelFilter==='api'?evs.filter(function(e){return e.body==='claude_code.api_request';}):
+    panelFilter==='tool'?evs.filter(function(e){return e.body==='claude_code.tool_result';}):
+    panelFilter==='comm'?evs.filter(function(e){return e.body==='sling'||e.body==='mail'||e.body==='nudge'||e.body==='done'||e.body==='agent.event';}):
+    evs;
+
+  var hlIdx=-1;
+  var tableHtml='<table><thead><tr><th>Time</th><th>Event</th><th>Detail</th></tr></thead><tbody>';
+  for(var j=0;j<filtered.length;j++){
+    var ev=filtered[j];
+    var isHl=(ev.id===panelHighlight);
+    if(isHl) hlIdx=j;
+    var d=new Date(ev.timestamp);
+    var ts=pad2(d.getHours())+':'+pad2(d.getMinutes())+':'+pad2(d.getSeconds());
+    tableHtml+='<tr id="ev-row-'+j+'" class="'+(ev.severity==='error'?'err-row':'')+(isHl?' wf2-hl':'')+'"><td class="mono dim">'+ts+'</td>'
+             +'<td>'+evBadge(ev.body)+'</td>'
+             +'<td class="mono">'+evDetail(ev)+'</td></tr>';
+  }
+  tableHtml+='</tbody></table>';
+
+  detContent.innerHTML='<div class="wf2-dhdr">'
     +'<span><b>'+(run.agent_name||run.role)+'</b>'
-    +' &nbsp;|&nbsp; role: '+esc(run.role||'—')
-    +' &nbsp;|&nbsp; rig: '+esc(run.rig||'town')+'</span>'
-    +'<span>started: '+fmtTime(run.started_at)
-    +' &nbsp; dur: '+dur
-    +' &nbsp; cost: $'+run.cost.toFixed(4)+'</span>'
+    +' &nbsp;|&nbsp; '+esc(run.role||'—')
+    +' &nbsp;·&nbsp; '+esc(run.rig||'town')+'</span>'
+    +'<span style="font-size:10px;color:#8b949e">'+fmtTime(run.started_at)+' · '+dur+(run.cost>0?' · $'+run.cost.toFixed(4):'')+'</span>'
     +'<button onclick="closeDetail()">✕</button>'
     +'</div>'
-    +'<div class="wf2-devents"><table>'
-    +'<thead><tr><th>Time</th><th>Event</th><th>Detail</th></tr></thead><tbody>';
-  var evs=run.events||[];
-  for(var i=0;i<evs.length;i++){
-    var ev=evs[i];
-    var d=new Date(ev.timestamp);
-    var ts=d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0')+':'+d.getSeconds().toString().padStart(2,'0');
-    html+='<tr class="'+(ev.severity==='error'?'err-row':'')+'"><td class="mono dim">'+ts+'</td>'
-         +'<td>'+evBadge(ev.body)+'</td>'
-         +'<td class="mono">'+evDetail(ev)+'</td></tr>';
+    +tabHtml
+    +'<div class="wf2-devents">'+tableHtml+'</div>';
+
+  if(hlIdx>=0){
+    setTimeout(function(){
+      var el=document.getElementById('ev-row-'+hlIdx);
+      if(el) el.scrollIntoView({block:'nearest'});
+    },0);
   }
-  html+='</tbody></table></div>';
-  detContent.innerHTML=html;
-  detPanel.style.display='flex';
 }
 
-function showDetailAPI(ev, run){
-  var a=ev.attrs||{};
-  detContent.innerHTML='<div class="wf2-dhdr"><span><b>API Call</b> — '+(run.agent_name||run.role)+'</span>'
-    +'<button onclick="closeDetail()">✕</button></div>'
-    +'<div class="wf2-devents"><table>'
-    +'<tr><th>Model</th><td>'+esc(a.model||'—')+'</td></tr>'
-    +'<tr><th>Input tokens</th><td>'+(a.input_tokens||0)+'</td></tr>'
-    +'<tr><th>Output tokens</th><td>'+(a.output_tokens||0)+'</td></tr>'
-    +'<tr><th>Cache read</th><td>'+(a.cache_read_tokens||0)+'</td></tr>'
-    +'<tr><th>Cost</th><td>$'+parseFloat(a.cost_usd||0).toFixed(6)+'</td></tr>'
-    +'<tr><th>Duration</th><td>'+fmtMs(parseFloat(a.duration_ms||0))+'</td></tr>'
-    +'<tr><th>Session ID</th><td class="mono">'+esc(a['session.id']||'—')+'</td></tr>'
-    +'</table></div>';
-  detPanel.style.display='flex';
-}
+function switchTab(filter){ panelFilter=filter; renderPanel(); }
+window.switchTab=switchTab;
 
-function showDetailTool(ev, run){
-  var a=ev.attrs||{};
-  detContent.innerHTML='<div class="wf2-dhdr"><span><b>'+(a.tool_name||'Tool')+'</b> — '+(run.agent_name||run.role)+'</span>'
-    +'<button onclick="closeDetail()">✕</button></div>'
-    +'<div class="wf2-devents"><table>'
-    +'<tr><th>Tool</th><td>'+esc(a.tool_name||'—')+'</td></tr>'
-    +'<tr><th>Duration</th><td>'+fmtMs(parseFloat(a.duration_ms||0))+'</td></tr>'
-    +'<tr><th>Success</th><td>'+(a.success!=='false'?'<span style="color:#56d364">✓ yes</span>':'<span style="color:#ef4444">✗ no</span>')+'</td></tr>'
-    +'</table>'
-    +(a.tool_parameters?'<pre class="wf2-pre">'+esc(a.tool_parameters.substring(0,600))+'</pre>':'')
-    +'</div>';
-  detPanel.style.display='flex';
-}
+function showDetail(run){ openPanel(run,'all',null); }
+function showDetailAPI(ev, run){ openPanel(run,'api',ev.id); }
+function showDetailTool(ev, run){ openPanel(run,'tool',ev.id); }
 
-function closeDetail(){ detPanel.style.display='none'; }
+function closeDetail(){
+  detPanel.style.display='none';
+  rebuildRows(); draw();
+}
 window.closeDetail=closeDetail;
 
 // ── Summary ───────────────────────────────────────────────────────────────────
@@ -794,9 +961,10 @@ function applyFilters(){
   window.history.replaceState(null,'','?'+params.toString());
   applyFiltersLocal();
   computeTimeRange();
+  computeFullRange();
   rebuildRows();
   buildCommMap();
-  draw();
+  draw(); drawOverview();
 }
 window.applyFilters=applyFilters;
 
@@ -817,6 +985,7 @@ function toggleCommMap(){
 window.toggleCommMap=toggleCommMap;
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
+function pad2(n){ return n.toString().padStart(2,'0'); }
 function fmtMs(ms){
   if(ms<1000) return Math.round(ms)+'ms';
   if(ms<60000) return (ms/1000).toFixed(1)+'s';
@@ -824,9 +993,7 @@ function fmtMs(ms){
 }
 function fmtTime(ts){
   var d=new Date(ts);
-  return d.getHours().toString().padStart(2,'0')+':'
-        +d.getMinutes().toString().padStart(2,'0')+':'
-        +d.getSeconds().toString().padStart(2,'0');
+  return pad2(d.getHours())+':'+pad2(d.getMinutes())+':'+pad2(d.getSeconds());
 }
 function esc(s){
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
