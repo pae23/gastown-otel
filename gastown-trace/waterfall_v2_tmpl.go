@@ -3,7 +3,7 @@ package main
 const tmplWaterfallV2 = `
 {{define "content"}}
 <style>
-/* ── Waterfall V2 ─────────────────────────────────────────── */
+/* ── Waterfall V2 — event table layout ───────────────────────────────────── */
 .wf2-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:4px 0 8px}
 .wf2-toolbar select,.wf2-toolbar input[type=text]{background:#161b22;border:1px solid #30363d;color:#c9d1d9;padding:4px 8px;border-radius:4px;font-size:12px;font-family:monospace}
 .wf2-toolbar label{font-size:11px;color:#8b949e}
@@ -14,28 +14,37 @@ const tmplWaterfallV2 = `
 .wf2-card-val{font-size:22px;font-weight:700;color:#c9d1d9;font-family:monospace}
 .wf2-card-lbl{font-size:10px;color:#8b949e;text-transform:uppercase;letter-spacing:.5px}
 .wf2-instance{font-size:11px;color:#58a6ff;margin-bottom:6px}
-#wf-ov-wrap{border:1px solid #30363d;border-radius:4px;background:#0d1117;margin-bottom:4px;cursor:crosshair;overflow:hidden;user-select:none;position:relative}
+/* Overview */
+#wf-ov-wrap{border:1px solid #30363d;border-radius:4px;background:#0d1117;margin-bottom:6px;cursor:crosshair;overflow:hidden;user-select:none;position:relative}
 #wf-ov{display:block}
-#wf-outer{position:relative;display:flex;align-items:flex-start;gap:8px}
-#wf-wrap{flex:1;min-width:0;overflow-y:auto;overflow-x:hidden;max-height:60vh;border:1px solid #30363d;border-radius:4px;background:#0d1117;cursor:crosshair}
-#wf-canvas{display:block}
-#wf-tooltip{position:fixed;background:#1c2128;border:1px solid #30363d;padding:8px 10px;border-radius:4px;font-size:11px;color:#c9d1d9;pointer-events:none;display:none;z-index:200;max-width:240px;line-height:1.6;box-shadow:0 4px 12px rgba(0,0,0,.5)}
-#wf-detail{display:none;flex-direction:column;width:360px;min-width:280px;flex-shrink:0;border:1px solid #30363d;border-radius:4px;max-height:60vh;overflow:hidden}
-#wf-detail-content{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
-.wf2-tabs{display:flex;border-bottom:1px solid #30363d;flex-shrink:0;overflow-x:auto}
-.wf2-tab{background:transparent;border:none;border-bottom:2px solid transparent;color:#8b949e;padding:6px 10px;cursor:pointer;font-size:11px;white-space:nowrap;font-family:monospace}
-.wf2-tab:hover{color:#c9d1d9}
-.wf2-tab.active{color:#58a6ff;border-bottom-color:#58a6ff;background:#0d111766}
-.wf2-hl td{background:#1f6feb22!important}.wf2-hl td:first-child{border-left:2px solid #58a6ff}
-.wf2-dhdr{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#161b22;border-bottom:1px solid #30363d;font-size:12px;flex-wrap:wrap;gap:6px}
-.wf2-dhdr button{background:#21262d;border:1px solid #30363d;color:#c9d1d9;padding:2px 8px;border-radius:4px;cursor:pointer;font-size:11px}
-.wf2-devents{overflow-y:auto;padding:0 8px 8px;flex:1;min-height:0}
-.wf2-devents table{width:100%;border-collapse:collapse;font-size:11px}
-.wf2-devents th{color:#8b949e;text-align:left;padding:5px 8px;border-bottom:1px solid #30363d;font-weight:600;position:sticky;top:0;background:#0d1117}
-.wf2-devents td{padding:3px 8px;border-bottom:1px solid #161b22;vertical-align:top;max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.wf2-devents tr:hover td{background:#1c2128}
+#wf-tooltip{position:fixed;background:#1c2128;border:1px solid #30363d;padding:8px 10px;border-radius:4px;font-size:11px;color:#c9d1d9;pointer-events:none;display:none;z-index:200;max-width:260px;line-height:1.6;box-shadow:0 4px 12px rgba(0,0,0,.5)}
+/* Main flex area */
+#wf-main{display:flex;gap:8px;align-items:flex-start}
+/* Table */
+.wf-table-wrap{flex:1;min-width:0;overflow:auto;max-height:65vh;border:1px solid #30363d;border-radius:4px;background:#0d1117}
+.wf-table{width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed}
+.wf-table th{background:#161b22;color:#8b949e;text-align:left;padding:6px 8px;border-bottom:1px solid #30363d;position:sticky;top:0;z-index:1;font-weight:600;white-space:nowrap;user-select:none}
+.wf-table td{padding:3px 8px;border-bottom:1px solid #161b22;vertical-align:middle;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wf-table tr.wf-row:hover td{background:#1c2128;cursor:pointer}
+.wf-table tr.wf-sel td{background:#1f6feb1a!important}
+.wf-table tr.wf-sel td:first-child{border-left:2px solid #58a6ff}
 .err-row td{border-left:2px solid #ef4444}
-.wf2-pre{background:#161b22;padding:8px;border-radius:4px;overflow-x:auto;font-size:10px;color:#c9d1d9;margin:8px 0;white-space:pre-wrap;word-break:break-all}
+.wf-bar-outer{position:relative;height:10px;background:#0d1117;overflow:hidden}
+.wf-bar-inner{position:absolute;top:0;height:10px;border-radius:1px;min-width:2px;opacity:0.85}
+.wf-row-count{font-size:10px;color:#8b949e;background:#161b22;border:1px solid #30363d;padding:2px 8px;border-radius:4px}
+/* Detail panel */
+#wf-detail{display:none;flex-direction:column;width:380px;min-width:300px;flex-shrink:0;border:1px solid #30363d;border-radius:4px;max-height:65vh;overflow:hidden}
+#wf-detail-content{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
+.wf2-dhdr{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#161b22;border-bottom:1px solid #30363d;font-size:12px;flex-wrap:wrap;gap:6px;flex-shrink:0}
+.wf2-dhdr button{background:#21262d;border:1px solid #30363d;color:#c9d1d9;padding:2px 8px;border-radius:4px;cursor:pointer;font-size:11px}
+.wf2-devents{overflow-y:auto;flex:1;min-height:0;padding:0 0 8px}
+.wf2-devents table{width:100%;border-collapse:collapse;font-size:11px}
+.wf2-devents th{color:#8b949e;text-align:left;padding:4px 8px;font-weight:500;white-space:nowrap;vertical-align:top;width:110px;border-bottom:1px solid #1c2128}
+.wf2-devents td{padding:3px 8px;border-bottom:1px solid #161b22;vertical-align:top;word-break:break-all}
+.wf2-devents tr:hover td{background:#1c2128}
+.wf2-pre{background:#161b22;padding:6px 8px;border-radius:4px;font-size:9px;color:#c9d1d9;margin:2px 0;white-space:pre-wrap;word-break:break-all;max-height:180px;overflow-y:auto;overflow-x:auto}
+.wf2-section-hdr{color:#58a6ff;padding:8px 8px 3px;font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;border-bottom:1px solid #1c2128;background:#0d1117;position:sticky;top:0}
+/* Event badges */
 .ev-b{padding:1px 5px;border-radius:3px;font-size:9px;font-family:monospace;white-space:nowrap}
 .ev-agent{background:#10b98122;color:#10b981}.ev-api{background:#f59e0b22;color:#f59e0b}
 .ev-tool{background:#3b82f622;color:#3b82f6}.ev-bd{background:#ef444422;color:#ef4444}
@@ -44,11 +53,6 @@ const tmplWaterfallV2 = `
 .ev-prime{background:#3b82f622;color:#3b82f6}.ev-prompt{background:#06b6d422;color:#06b6d4}
 .ev-sess{background:#6b728022;color:#6b7280}.ev-inst{background:#8b5cf622;color:#8b5cf6}
 .ev-other{background:#30363d;color:#8b949e}
-#wf-commmap-body{overflow-x:auto;padding:8px 0}
-#wf-commsvg{display:block}
-.wf2-legend{display:flex;gap:10px;flex-wrap:wrap;padding:6px 0 2px;font-size:10px;color:#8b949e}
-.wf2-leg{display:flex;align-items:center;gap:4px}
-.wf2-leg-sq{width:10px;height:10px;border-radius:2px;display:inline-block}
 </style>
 
 <div id="wf2-page">
@@ -65,11 +69,14 @@ const tmplWaterfallV2 = `
     <option>refinery</option><option>polecat</option><option>dog</option>
     <option>boot</option><option>crew</option>
   </select>
+  <label>Type</label>
+  <select id="f-type"><option value="">All types</option></select>
   <label>Search</label>
-  <input type="text" id="f-search" placeholder="bead ID, agent name…" style="width:160px">
+  <input type="text" id="f-search" placeholder="agent, bead ID…" style="width:140px">
   <button onclick="applyFilters()">Apply</button>
   <button class="sec" onclick="resetFilters()">Reset</button>
   <span style="flex:1"></span>
+  <span class="wf-row-count" id="wf-row-count">—</span>
   <span style="font-size:11px;color:#8b949e" id="wf2-winlabel">window: {{.Window}}</span>
 </div>
 
@@ -82,40 +89,28 @@ const tmplWaterfallV2 = `
   <div class="wf2-card"><div class="wf2-card-val" id="wf2-s-dur">—</div><div class="wf2-card-lbl">Total duration</div></div>
 </div>
 
-<div class="wf2-legend">
-  <span class="wf2-leg"><span class="wf2-leg-sq" style="background:#f59e0b22;border:1px solid #f59e0b"></span>Mayor</span>
-  <span class="wf2-leg"><span class="wf2-leg-sq" style="background:#8b5cf622;border:1px solid #8b5cf6"></span>Deacon</span>
-  <span class="wf2-leg"><span class="wf2-leg-sq" style="background:#3b82f622;border:1px solid #3b82f6"></span>Witness</span>
-  <span class="wf2-leg"><span class="wf2-leg-sq" style="background:#10b98122;border:1px solid #10b981"></span>Refinery</span>
-  <span class="wf2-leg"><span class="wf2-leg-sq" style="background:#ef444422;border:1px solid #ef4444"></span>Polecat</span>
-  <span class="wf2-leg"><span class="wf2-leg-sq" style="background:#f9731622;border:1px solid #f97316"></span>Dog</span>
-  &nbsp;|&nbsp;
-  <span class="wf2-leg"><span style="display:inline-block;width:16px;height:2px;background:#f59e0b;vertical-align:middle"></span>API call</span>
-  <span class="wf2-leg"><span style="display:inline-block;width:8px;height:8px;background:#10b981;transform:rotate(45deg);vertical-align:middle"></span>Tool ✓</span>
-  <span class="wf2-leg"><span style="display:inline-block;width:8px;height:8px;background:#ef4444;transform:rotate(45deg);vertical-align:middle"></span>Tool ✗</span>
-  &nbsp;|&nbsp;
-  <span class="wf2-leg" style="color:#f59e0b">— sling</span>
-  <span class="wf2-leg" style="color:#eab308">— mail</span>
-  <span class="wf2-leg" style="color:#8b5cf6">· nudge</span>
-  <span class="wf2-leg" style="color:#10b981">— spawn</span>
-</div>
-
 <div id="wf-ov-wrap"><canvas id="wf-ov"></canvas></div>
+<div id="wf-tooltip"></div>
 
-<div id="wf-outer">
-  <div id="wf-wrap"><canvas id="wf-canvas"></canvas></div>
+<div id="wf-main">
+  <div class="wf-table-wrap">
+    <table class="wf-table">
+      <thead>
+        <tr>
+          <th style="width:64px">Time</th>
+          <th style="width:140px">Type</th>
+          <th style="width:110px">Agent</th>
+          <th style="width:72px">Rig</th>
+          <th>Detail</th>
+          <th style="width:54px">Dur</th>
+          <th style="width:110px">Waterfall</th>
+        </tr>
+      </thead>
+      <tbody id="wf-tbody"></tbody>
+    </table>
+  </div>
   <div id="wf-detail">
     <div id="wf-detail-content"></div>
-  </div>
-  <div id="wf-tooltip"></div>
-</div>
-
-<div class="section" style="margin-top:12px">
-  <div class="section-hdr" style="cursor:pointer;user-select:none" onclick="toggleCommMap()">
-    Communication Map <span id="wf-cmarrow">▼</span>
-  </div>
-  <div id="wf-commmap-body">
-    <svg id="wf-commsvg"></svg>
   </div>
 </div>
 
@@ -123,106 +118,83 @@ const tmplWaterfallV2 = `
 
 <script>
 (function(){
-// ── Embedded data ─────────────────────────────────────────────────────────────
+// ── Data ──────────────────────────────────────────────────────────────────────
 var DATA = {{.JSONData}};
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-var LW   = 200;  // label column width
-var ROW  = 50;   // run row height
-var RIGH = 28;   // rig header height
-var RULH = 36;   // ruler height
-var BY   = 6;    // bar top offset within row
-var BH   = 22;   // bar height
-var TY   = BY + BH + 8;  // tool marker center-y within row
-var TR   = 5;    // tool marker half-size
-
 var ROLE_CLR = {
   mayor:'#f59e0b', deacon:'#8b5cf6', witness:'#3b82f6',
   refinery:'#10b981', polecat:'#ef4444', dog:'#f97316',
   boot:'#6b7280', crew:'#06b6d4'
 };
 function rc(role){ return ROLE_CLR[role]||'#9ca3af'; }
+var MAX_ROWS = 2000;
 
 // ── State ─────────────────────────────────────────────────────────────────────
-var vStart=0, vEnd=0;
-var fullStart=0, fullEnd=0;
-var rows=[];
-var collapsed=new Set();
-var canvas, ctx, wrap, tip, detPanel, detContent;
-var ovCanvas, ovCtx;
-var dragging=false, dragX0=0, dragVS0=0, dragVE0=0;
+var vStart=0, vEnd=0, fullStart=0, fullEnd=0;
+var allEvents=[], selectedRow=null, filteredData=null;
+var ovCanvas, ovCtx, detPanel, detContent, tip;
 var ovDrag=false, ovDragMode=null, ovDragX0=0, ovDragVS0=0, ovDragVE0=0;
-var hovered=null;
-// current filter state (applied in-memory on DATA copy)
-var filteredData = null;
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 function init(){
-  canvas     = document.getElementById('wf-canvas');
-  ctx        = canvas.getContext('2d');
-  wrap       = document.getElementById('wf-wrap');
-  tip        = document.getElementById('wf-tooltip');
-  detPanel   = document.getElementById('wf-detail');
-  detContent = document.getElementById('wf-detail-content');
   ovCanvas   = document.getElementById('wf-ov');
   ovCtx      = ovCanvas.getContext('2d');
+  detPanel   = document.getElementById('wf-detail');
+  detContent = document.getElementById('wf-detail-content');
+  tip        = document.getElementById('wf-tooltip');
+
   var ovWrap = document.getElementById('wf-ov-wrap');
   ovCanvas.width  = ovWrap.clientWidth||900;
-  ovCanvas.height = 52;
-  ovWrap.style.height = '52px';
+  ovCanvas.height = 56;
+  ovWrap.style.height = '56px';
 
   filteredData = DATA;
 
-  // Populate rig filter options
-  var sel = document.getElementById('f-rig');
+  // Populate rig filter
+  var selRig = document.getElementById('f-rig');
   for(var i=0;i<DATA.rigs.length;i++){
     var o=document.createElement('option');
     o.value=o.textContent=DATA.rigs[i].name;
-    sel.appendChild(o);
+    selRig.appendChild(o);
   }
 
-  // Restore filter values from URL
-  var params = new URLSearchParams(window.location.search);
+  // Restore URL params
+  var params=new URLSearchParams(window.location.search);
   if(params.get('rig'))  document.getElementById('f-rig').value  = params.get('rig');
   if(params.get('role')) document.getElementById('f-role').value = params.get('role');
+  if(params.get('type')) document.getElementById('f-type').value = params.get('type');
   if(params.get('q'))    document.getElementById('f-search').value = params.get('q');
 
-  // Apply filters if any are set
   applyFiltersLocal();
-  computeTimeRange();
+  buildAllEvents();
   computeFullRange();
+  vStart=fullStart; vEnd=fullEnd;
+  populateTypeFilter();
   updateSummary();
-  rebuildRows();
-  buildCommMap();
+  renderTable();
+  drawOverview();
 
-  canvas.addEventListener('mousemove', onMove);
-  canvas.addEventListener('mouseleave', onLeave);
-  canvas.addEventListener('click', onClick);
-  canvas.addEventListener('wheel', onWheel, {passive:false});
-  canvas.addEventListener('mousedown', onDown);
   ovCanvas.addEventListener('mousedown', onOvDown);
   ovCanvas.addEventListener('mousemove', onOvMove);
   ovCanvas.addEventListener('mouseleave', function(){ ovCanvas.style.cursor='crosshair'; });
   window.addEventListener('mousemove', onWinMove);
-  window.addEventListener('mouseup', onUp);
-  window.addEventListener('resize', onResize);
-  window.addEventListener('keydown', function(e){ if(e.key==='Escape') closeDetail(); });
-
-  requestAnimationFrame(function(){ draw(); drawOverview(); });
+  window.addEventListener('mouseup',   onWinUp);
+  window.addEventListener('resize',    onResize);
+  window.addEventListener('keydown',   function(e){ if(e.key==='Escape') closeDetail(); });
 }
 
+// ── Data helpers ──────────────────────────────────────────────────────────────
 function applyFiltersLocal(){
   var rigF  = document.getElementById('f-rig').value;
   var roleF = document.getElementById('f-role').value;
   var qF    = document.getElementById('f-search').value.toLowerCase();
-
-  // Deep-copy rigs and filter
-  var rigs = DATA.rigs.map(function(rig){
+  var rigs  = DATA.rigs.map(function(rig){
     if(rigF && rig.name !== rigF) return null;
     var runs = rig.runs.filter(function(run){
       if(roleF && run.role !== roleF) return false;
       if(qF){
-        var hay = (run.run_id+run.agent_name+run.role+run.session_id+run.rig).toLowerCase();
+        var hay=(run.run_id+run.agent_name+run.role+run.session_id+run.rig).toLowerCase();
         if(hay.indexOf(qF)<0) return false;
       }
       return true;
@@ -230,531 +202,117 @@ function applyFiltersLocal(){
     if(runs.length===0) return null;
     return {name:rig.name, collapsed:rig.collapsed, runs:runs};
   }).filter(Boolean);
-
   filteredData = {
-    instance:       DATA.instance,
-    town_root:      DATA.town_root,
-    window:         DATA.window,
-    summary:        DATA.summary,
-    rigs:           rigs,
-    communications: DATA.communications,
-    beads:          DATA.beads
+    instance:DATA.instance, town_root:DATA.town_root,
+    window:DATA.window, summary:DATA.summary,
+    rigs:rigs, communications:DATA.communications, beads:DATA.beads
   };
 }
 
-function computeTimeRange(){
-  var mn=Infinity, mx=-Infinity;
+function buildAllEvents(){
+  allEvents = [];
   for(var i=0;i<filteredData.rigs.length;i++){
     var rig=filteredData.rigs[i];
     for(var j=0;j<rig.runs.length;j++){
       var run=rig.runs[j];
-      var st=new Date(run.started_at).getTime();
-      var et=run.ended_at?new Date(run.ended_at).getTime():Date.now();
-      if(st<mn) mn=st;
-      if(et>mx) mx=et;
-    }
-  }
-  if(!isFinite(mn)){ mn=Date.now()-3600000; mx=Date.now(); }
-  var pad=(mx-mn)*0.04||5000;
-  vStart=mn-pad; vEnd=mx+pad;
-}
-
-function rebuildRows(){
-  rows=[];
-  for(var i=0;i<filteredData.rigs.length;i++){
-    var rig=filteredData.rigs[i];
-    rows.push({type:'rig', name:rig.name, rig:rig});
-    if(!collapsed.has(rig.name)){
-      for(var j=0;j<rig.runs.length;j++){
-        rows.push({type:'run', run:rig.runs[j], rigName:rig.name});
+      var evs=run.events||[];
+      for(var k=0;k<evs.length;k++){
+        allEvents.push({ev:evs[k], run:run, rigName:rig.name});
       }
     }
   }
-  var totalH=RULH;
-  for(var k=0;k<rows.length;k++) totalH+=(rows[k].type==='rig'?RIGH:ROW);
-  var W=wrap.clientWidth||900;
-  canvas.width  = W;
-  canvas.height = Math.max(300, totalH+20);
-  ctx = canvas.getContext('2d');
+  allEvents.sort(function(a,b){ return a.ev.timestamp<b.ev.timestamp?-1:1; });
 }
 
-function onResize(){
-  var ovWrap=document.getElementById('wf-ov-wrap');
-  if(ovWrap){ ovCanvas.width=ovWrap.clientWidth||900; }
-  rebuildRows(); draw(); drawOverview();
-}
-
-// ── Drawing ───────────────────────────────────────────────────────────────────
-function draw(){
-  var W=canvas.width, H=canvas.height;
-  ctx.fillStyle='#0d1117';
-  ctx.fillRect(0,0,W,H);
-
-  drawGrid(W,H);
-
-  var y=RULH;
-  for(var i=0;i<rows.length;i++){
-    var row=rows[i];
-    if(row.type==='rig'){drawRigRow(row,y,W); y+=RIGH;}
-    else{drawRunRow(row,y,W); y+=ROW;}
-  }
-
-  drawComms(W);
-  drawRuler(W);
-
-  // Label column right border
-  ctx.strokeStyle='#30363d'; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(LW,0); ctx.lineTo(LW,H); ctx.stroke();
-}
-
-function niceInterval(rangeMs,pixW){
-  var ivs=[500,1000,2000,5000,10000,15000,30000,60000,120000,300000,600000,1800000,3600000,7200000];
-  for(var i=0;i<ivs.length;i++){
-    if(pixW/(rangeMs/ivs[i])>=70) return ivs[i];
-  }
-  return ivs[ivs.length-1];
-}
-
-function toX(t,W){ var a=W-LW; return LW+((t-vStart)/(vEnd-vStart))*a; }
-function xToT(x,W){ var a=W-LW; return vStart+((x-LW)/a)*(vEnd-vStart); }
-
-function rulerLabel(t){
-  var d=new Date(t), r=vEnd-vStart;
-  var hh=d.getHours().toString().padStart(2,'0');
-  var mm=d.getMinutes().toString().padStart(2,'0');
-  var ss=d.getSeconds().toString().padStart(2,'0');
-  if(r<90000) return hh+':'+mm+':'+ss;
-  return hh+':'+mm;
-}
-
-function drawGrid(W,H){
-  var iv=niceInterval(vEnd-vStart,W-LW);
-  var first=Math.ceil(vStart/iv)*iv;
-  ctx.strokeStyle='#1c2128'; ctx.lineWidth=0.5;
-  for(var t=first;t<=vEnd;t+=iv){
-    var x=toX(t,W);
-    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
-  }
-}
-
-function drawRuler(W){
-  ctx.fillStyle='#161b22'; ctx.fillRect(0,0,W,RULH);
-  ctx.fillStyle='#0d1117'; ctx.fillRect(0,0,LW,RULH);
-  ctx.strokeStyle='#30363d'; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(0,RULH); ctx.lineTo(W,RULH); ctx.stroke();
-
-  ctx.fillStyle='#8b949e'; ctx.font='10px monospace'; ctx.textAlign='left';
-  ctx.fillText('Agent / Run', 8, RULH-10);
-
-  var iv=niceInterval(vEnd-vStart,W-LW);
-  var first=Math.ceil(vStart/iv)*iv;
-  ctx.textAlign='center'; ctx.fillStyle='#8b949e';
-  for(var t=first;t<=vEnd;t+=iv){
-    var x=toX(t,W);
-    ctx.fillText(rulerLabel(t), x, 16);
-    ctx.strokeStyle='#30363d'; ctx.lineWidth=1;
-    ctx.beginPath(); ctx.moveTo(x,RULH-5); ctx.lineTo(x,RULH); ctx.stroke();
-  }
-}
-
-function drawRigRow(row,y,W){
-  ctx.fillStyle='#0d1117'; ctx.fillRect(0,y,W,RIGH);
-  ctx.strokeStyle='#30363d'; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(0,y+RIGH-1); ctx.lineTo(W,y+RIGH-1); ctx.stroke();
-  var arrow=collapsed.has(row.name)?'▶':'▼';
-  ctx.fillStyle='#58a6ff'; ctx.font='bold 11px monospace'; ctx.textAlign='left';
-  ctx.fillText(arrow+' '+row.name, 8, y+18);
-  // run count dim
-  if(!collapsed.has(row.name)){
-    ctx.fillStyle='#30363d'; ctx.font='10px monospace';
-    ctx.fillText(row.rig.runs.length+' runs', LW+8, y+18);
-  }
-}
-
-function drawRunRow(row,y,W){
-  var run=row.run;
-  var isHov=(hovered&&hovered.run&&hovered.run.run_id===run.run_id);
-  ctx.fillStyle=isHov?'#1c2128':'#0d1117';
-  ctx.fillRect(0,y,W,ROW);
-  ctx.strokeStyle='#21262d'; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(0,y+ROW-1); ctx.lineTo(W,y+ROW-1); ctx.stroke();
-
-  // Label
-  var color=rc(run.role);
-  ctx.fillStyle='#c9d1d9'; ctx.font='11px monospace'; ctx.textAlign='left';
-  var label=(run.agent_name||run.role||run.session_id||run.run_id.substring(0,8));
-  ctx.fillText(label, 8, y+15);
-
-  ctx.fillStyle=color+'22'; ctx.fillRect(8,y+22,56,13);
-  ctx.fillStyle=color; ctx.font='9px monospace'; ctx.textAlign='center';
-  ctx.fillText((run.role||'?').substring(0,7), 36, y+32);
-
-  if(run.rig){
-    ctx.fillStyle='#8b949e'; ctx.font='9px monospace'; ctx.textAlign='left';
-    ctx.fillText(run.rig, 68, y+32);
-  }
-  if(run.cost>0){
-    ctx.fillStyle='#56d364'; ctx.font='9px monospace'; ctx.textAlign='right';
-    ctx.fillText('$'+run.cost.toFixed(3), LW-4, y+32);
-  }
-
-  // Session bar
-  var st=new Date(run.started_at).getTime();
-  var et=run.ended_at?new Date(run.ended_at).getTime():vEnd;
-  if(st<vEnd && et>vStart){
-    var x1=Math.max(LW, toX(st,W));
-    var x2=Math.min(W,  toX(et,W));
-    var bw=Math.max(3, x2-x1);
-    ctx.fillStyle=color+'25'; ctx.fillRect(x1,y+BY,bw,BH);
-    ctx.strokeStyle=color+'aa'; ctx.lineWidth=1.5;
-    ctx.strokeRect(x1+.5,y+BY+.5,bw-1,BH-1);
-    ctx.lineWidth=1;
-    if(run.running){
-      ctx.fillStyle=color;
-      ctx.beginPath();
-      ctx.arc(Math.min(W-6,x2-3),y+BY+BH/2,3,0,2*Math.PI);
-      ctx.fill();
-    }
-  }
-
-  // Events
-  var evs=run.events||[];
-  for(var i=0;i<evs.length;i++){
-    var ev=evs[i];
-    var et2=new Date(ev.timestamp).getTime();
-    if(et2<vStart||et2>vEnd) continue;
-    var ex=toX(et2,W);
-    if(ex<LW||ex>W) continue;
-
-    if(ev.body==='claude_code.api_request'){
-      ctx.strokeStyle='#f59e0b'; ctx.lineWidth=1.5; ctx.globalAlpha=0.65;
-      ctx.beginPath(); ctx.moveTo(ex,y+BY+2); ctx.lineTo(ex,y+BY+BH-2); ctx.stroke();
-      ctx.globalAlpha=1; ctx.lineWidth=1;
-    } else if(ev.body==='claude_code.tool_result'){
-      var ok=(ev.attrs&&ev.attrs.success!=='false');
-      ctx.fillStyle=ok?'#10b981':'#ef4444';
-      ctx.beginPath();
-      ctx.moveTo(ex,     y+TY-TR);
-      ctx.lineTo(ex+TR,  y+TY);
-      ctx.lineTo(ex,     y+TY+TR);
-      ctx.lineTo(ex-TR,  y+TY);
-      ctx.closePath(); ctx.fill();
-    }
-  }
-}
-
-function drawComms(W){
-  var runY={};
-  var y=RULH;
-  for(var i=0;i<rows.length;i++){
-    var row=rows[i];
-    if(row.type==='rig') y+=RIGH;
-    else{
-      runY[row.run.run_id]=y+BY+BH/2;
-      if(row.run.session_id) runY[row.run.session_id]=y+BY+BH/2;
-      y+=ROW;
-    }
-  }
-  var CC={sling:'#f59e0b',mail:'#eab308',nudge:'#8b5cf6',spawn:'#10b981',done:'#3b82f6'};
-  var comms=filteredData.communications||[];
-  ctx.lineWidth=1.5;
-  for(var k=0;k<comms.length;k++){
-    var c=comms[k];
-    var ct=new Date(c.time).getTime();
-    if(ct<vStart||ct>vEnd) continue;
-    var cx=toX(ct,W);
-    if(cx<LW||cx>W) continue;
-    var color=CC[c.type]||'#9ca3af';
-    var fy=runY[c.from], ty2=runY[c.to];
-    ctx.strokeStyle=color; ctx.fillStyle=color; ctx.globalAlpha=0.75;
-    if(fy!==undefined&&ty2!==undefined&&fy!==ty2){
-      var cp=Math.abs(ty2-fy)*0.35;
-      ctx.beginPath();
-      ctx.moveTo(cx,fy);
-      ctx.bezierCurveTo(cx+cp,fy,cx+cp,ty2,cx,ty2);
-      ctx.stroke();
-      var dir=ty2>fy?1:-1;
-      ctx.beginPath();
-      ctx.moveTo(cx,ty2);
-      ctx.lineTo(cx-4,ty2-6*dir);
-      ctx.lineTo(cx+4,ty2-6*dir);
-      ctx.closePath(); ctx.fill();
-    } else if(fy!==undefined){
-      ctx.beginPath();
-      ctx.arc(cx,fy,4,0,2*Math.PI);
-      ctx.stroke();
-    }
-    ctx.globalAlpha=1;
-    // micro label
-    if(fy!==undefined){
-      ctx.fillStyle=color; ctx.font='8px monospace'; ctx.textAlign='left';
-      ctx.fillText(c.type.substring(0,4),cx+5,(fy!==undefined?fy:0)-2);
-    }
-  }
-  ctx.lineWidth=1;
-}
-
-// ── Overview timeline ─────────────────────────────────────────────────────────
 function computeFullRange(){
   var mn=Infinity, mx=-Infinity;
-  for(var i=0;i<filteredData.rigs.length;i++){
-    var rig=filteredData.rigs[i];
-    for(var j=0;j<rig.runs.length;j++){
-      var run=rig.runs[j];
-      var st=new Date(run.started_at).getTime();
-      var et=run.ended_at?new Date(run.ended_at).getTime():Date.now();
-      if(st<mn) mn=st;
-      if(et>mx) mx=et;
-    }
+  for(var i=0;i<allEvents.length;i++){
+    var t=new Date(allEvents[i].ev.timestamp).getTime();
+    if(t<mn) mn=t; if(t>mx) mx=t;
   }
-  if(!isFinite(mn)){mn=Date.now()-3600000; mx=Date.now();}
+  if(!isFinite(mn)){ mn=Date.now()-3600000; mx=Date.now(); }
   var pad=(mx-mn)*0.04||5000;
   fullStart=mn-pad; fullEnd=mx+pad;
 }
 
-function ovX(t){ return ((t-fullStart)/(fullEnd-fullStart))*ovCanvas.width; }
-function ovT(x){ return fullStart+(x/ovCanvas.width)*(fullEnd-fullStart); }
-
-function drawOverview(){
-  var W=ovCanvas.width, H=ovCanvas.height;
-  if(!W||!H) return;
-  ovCtx.fillStyle='#0d1117';
-  ovCtx.fillRect(0,0,W,H);
-
-  // Collect all runs
-  var allRuns=[];
-  for(var i=0;i<filteredData.rigs.length;i++)
-    for(var j=0;j<filteredData.rigs[i].runs.length;j++)
-      allRuns.push(filteredData.rigs[i].runs[j]);
-
-  // Draw micro bars (stacked lanes, barZone = top 38px)
-  var barZone=H-14;
-  var laneH=allRuns.length>0?Math.max(1.5,Math.min(7,barZone/allRuns.length)):4;
-  for(var k=0;k<allRuns.length;k++){
-    var run=allRuns[k];
-    var st=new Date(run.started_at).getTime();
-    var et=run.ended_at?new Date(run.ended_at).getTime():fullEnd;
-    var x1=ovX(st), x2=Math.max(x1+1,ovX(et));
-    var y=2+k*laneH;
-    if(y>barZone) break;
-    ovCtx.fillStyle=rc(run.role)+'99';
-    ovCtx.fillRect(x1,y,x2-x1,laneH-0.5);
-  }
-
-  // Dim regions outside selection
-  var sx1=ovX(vStart), sx2=ovX(vEnd);
-  ovCtx.fillStyle='rgba(0,0,0,0.55)';
-  if(sx1>0) ovCtx.fillRect(0,0,sx1,H);
-  if(sx2<W) ovCtx.fillRect(sx2,0,W-sx2,H);
-
-  // Selection border
-  ovCtx.strokeStyle='#58a6ff';
-  ovCtx.lineWidth=1;
-  ovCtx.strokeRect(sx1+0.5,0.5,Math.max(2,sx2-sx1)-1,H-1);
-
-  // Handle grips
-  ovCtx.fillStyle='#58a6ff';
-  ovCtx.fillRect(sx1-1,0,3,H);
-  ovCtx.fillRect(sx2-2,0,3,H);
-
-  // Mini ruler at bottom
-  var iv=niceInterval(fullEnd-fullStart,W);
-  var first=Math.ceil(fullStart/iv)*iv;
-  ovCtx.fillStyle='#8b949e'; ovCtx.font='8px monospace'; ovCtx.textAlign='center';
-  for(var t=first;t<=fullEnd;t+=iv){
-    var x=ovX(t);
-    ovCtx.fillStyle='#30363d'; ovCtx.fillRect(x,H-14,1,4);
-    ovCtx.fillStyle='#8b949e'; ovCtx.fillText(rulerLabel(t),x,H-1);
-  }
+function populateTypeFilter(){
+  var types={};
+  for(var i=0;i<allEvents.length;i++) types[allEvents[i].ev.body]=1;
+  var sel=document.getElementById('f-type');
+  while(sel.options.length>1) sel.remove(1);
+  Object.keys(types).sort().forEach(function(k){
+    var o=document.createElement('option'); o.value=o.textContent=k; sel.appendChild(o);
+  });
 }
 
-function onOvMove(e){
-  var r=ovCanvas.getBoundingClientRect();
-  var x=e.clientX-r.left;
-  var W=ovCanvas.width;
-  var sx1=ovX(vStart), sx2=ovX(vEnd);
-  if(Math.abs(x-sx1)<8||Math.abs(x-sx2)<8) ovCanvas.style.cursor='ew-resize';
-  else if(x>sx1&&x<sx2) ovCanvas.style.cursor='grab';
-  else ovCanvas.style.cursor='crosshair';
-}
+// ── Table rendering ───────────────────────────────────────────────────────────
+function renderTable(){
+  var fType = document.getElementById('f-type').value;
+  var fQ    = document.getElementById('f-search').value.toLowerCase();
+  var range = vEnd-vStart;
 
-function onOvDown(e){
-  var r=ovCanvas.getBoundingClientRect();
-  var x=e.clientX-r.left;
-  var W=ovCanvas.width;
-  var sx1=ovX(vStart), sx2=ovX(vEnd);
-  if(Math.abs(x-sx1)<8){
-    ovDragMode='left';
-  } else if(Math.abs(x-sx2)<8){
-    ovDragMode='right';
-  } else if(x>sx1&&x<sx2){
-    ovDragMode='pan';
-  } else {
-    // click outside: center view on click point
-    var t=ovT(x);
-    var half=(vEnd-vStart)/2;
-    vStart=t-half; vEnd=t+half;
-    draw(); drawOverview(); return;
-  }
-  ovDrag=true; ovDragX0=x; ovDragVS0=vStart; ovDragVE0=vEnd;
-  ovCanvas.style.cursor='grabbing';
-  e.preventDefault();
-}
-
-window.addEventListener('mousemove', function(e){
-  if(!ovDrag) return;
-  var r=ovCanvas.getBoundingClientRect();
-  var x=e.clientX-r.left;
-  var W=ovCanvas.width;
-  var dt=(x-ovDragX0)/W*(fullEnd-fullStart);
-  if(ovDragMode==='pan'){
-    vStart=ovDragVS0+dt; vEnd=ovDragVE0+dt;
-  } else if(ovDragMode==='left'){
-    vStart=Math.min(ovDragVS0+dt, ovDragVE0-1000);
-  } else {
-    vEnd=Math.max(ovDragVE0+dt, ovDragVS0+1000);
-  }
-  draw(); drawOverview();
-});
-window.addEventListener('mouseup', function(){ if(ovDrag){ ovDrag=false; ovCanvas.style.cursor='crosshair'; } });
-
-// ── Hit test ──────────────────────────────────────────────────────────────────
-function hitTest(x,y){
-  var ry=RULH;
-  for(var i=0;i<rows.length;i++){
-    var row=rows[i];
-    var h=row.type==='rig'?RIGH:ROW;
-    if(y>=ry&&y<ry+h){
-      if(row.type==='rig') return{type:'rig',rigName:row.name};
-      if(x>=LW){
-        var run=row.run;
-        var evs=run.events||[];
-        // tools first
-        for(var j=0;j<evs.length;j++){
-          var ev=evs[j];
-          if(ev.body!=='claude_code.tool_result') continue;
-          var ex=toX(new Date(ev.timestamp).getTime(),canvas.width);
-          if(Math.abs(x-ex)<=TR+3&&y>=ry+TY-TR-3&&y<=ry+TY+TR+3)
-            return{type:'tool',ev:ev,run:run};
-        }
-        // api ticks
-        for(var j=0;j<evs.length;j++){
-          var ev=evs[j];
-          if(ev.body!=='claude_code.api_request') continue;
-          var ex=toX(new Date(ev.timestamp).getTime(),canvas.width);
-          if(Math.abs(x-ex)<=5&&y>=ry+BY&&y<=ry+BY+BH)
-            return{type:'api',ev:ev,run:run};
-        }
-        // session bar
-        var st=new Date(run.started_at).getTime();
-        var et=run.ended_at?new Date(run.ended_at).getTime():vEnd;
-        var t=xToT(x,canvas.width);
-        if(t>=st&&t<=et&&y>=ry+BY&&y<=ry+BY+BH)
-          return{type:'session',run:run};
-      }
-      if(x<LW) return{type:'label',run:row.run};
-      return null;
+  var rows = allEvents.filter(function(row){
+    var t=new Date(row.ev.timestamp).getTime();
+    if(t<vStart||t>vEnd) return false;
+    if(fType && row.ev.body !== fType) return false;
+    if(fQ){
+      var hay=(row.run.agent_name+row.run.role+row.rigName+row.ev.body+JSON.stringify(row.ev.attrs||{})).toLowerCase();
+      if(hay.indexOf(fQ)<0) return false;
     }
-    ry+=h;
-  }
-  return null;
-}
+    return true;
+  });
 
-// ── Events ────────────────────────────────────────────────────────────────────
-function onMove(e){
-  if(dragging) return;
-  var r=canvas.getBoundingClientRect();
-  var x=e.clientX-r.left, y=e.clientY-r.top;
-  var item=hitTest(x,y);
-  if(item){ canvas.style.cursor='pointer'; showTip(e,item); hovered=item; }
-  else     { canvas.style.cursor='crosshair'; hideTip(); hovered=null; }
-  draw();
-}
-function onLeave(){ hideTip(); hovered=null; draw(); }
+  var total=rows.length, capped=rows.length>MAX_ROWS;
+  if(capped) rows=rows.slice(0,MAX_ROWS);
 
-function onClick(e){
-  var r=canvas.getBoundingClientRect();
-  var item=hitTest(e.clientX-r.left, e.clientY-r.top);
-  if(!item) return;
-  if(item.type==='rig'){
-    collapsed.has(item.rigName)?collapsed.delete(item.rigName):collapsed.add(item.rigName);
-    rebuildRows(); draw(); return;
-  }
-  if(item.type==='session'||item.type==='label') showDetail(item.run);
-  else if(item.type==='api')  showDetailAPI(item.ev, item.run);
-  else if(item.type==='tool') showDetailTool(item.ev, item.run);
-}
-
-function onWheel(e){
-  e.preventDefault();
-  var r=canvas.getBoundingClientRect();
-  var x=e.clientX-r.left;
-  if(x<LW) return;
-  var t=xToT(x,canvas.width);
-  var factor=e.deltaY>0?1.25:0.8;
-  var range=(vEnd-vStart)*factor;
-  var ratio=(t-vStart)/(vEnd-vStart);
-  vStart=t-ratio*range; vEnd=t+(1-ratio)*range;
-  draw(); drawOverview();
-}
-function onDown(e){
-  var r=canvas.getBoundingClientRect();
-  if(e.clientX-r.left<LW) return;
-  dragging=true; dragX0=e.clientX; dragVS0=vStart; dragVE0=vEnd;
-  canvas.style.cursor='grabbing';
-}
-function onWinMove(e){
-  if(!dragging) return;
-  var dx=e.clientX-dragX0;
-  var avail=canvas.width-LW;
-  var dT=dx/avail*(dragVE0-dragVS0);
-  vStart=dragVS0-dT; vEnd=dragVE0-dT;
-  draw(); drawOverview();
-}
-function onUp(){ dragging=false; canvas.style.cursor='crosshair'; }
-
-// ── Tooltip ───────────────────────────────────────────────────────────────────
-function showTip(e,item){
   var html='';
-  if(item.type==='session'||item.type==='label'){
-    var r=item.run;
-    var dur=r.duration_ms?fmtMs(r.duration_ms):(r.running?'running':'—');
-    html='<b>'+(r.agent_name||r.role)+'</b><br>'
-        +'Role: '+(r.role||'—')+' &nbsp; Rig: '+(r.rig||'town')+'<br>'
-        +'run.id: '+(r.run_id?r.run_id.substring(0,12)+'…':'—')+'<br>'
-        +'Duration: '+dur+'<br>'
-        +(r.cost>0?'Cost: $'+r.cost.toFixed(4)+'<br>':'')
-        +'Events: '+(r.events||[]).length;
-  } else if(item.type==='api'){
-    var a=item.ev.attrs||{};
-    html='<b>API call</b><br>'+
-         'Model: '+(a.model||'—')+'<br>'+
-         'In: '+(a.input_tokens||0)+' &nbsp; Out: '+(a.output_tokens||0)+'<br>'+
-         'Cache: '+(a.cache_read_tokens||0)+'<br>'+
-         'Cost: $'+parseFloat(a.cost_usd||0).toFixed(5)+'<br>'+
-         'Dur: '+fmtMs(parseFloat(a.duration_ms||0));
-  } else if(item.type==='tool'){
-    var a=item.ev.attrs||{};
-    html='<b>'+(a.tool_name||'Tool')+'</b><br>'+
-         'Dur: '+fmtMs(parseFloat(a.duration_ms||0))+'<br>'+
-         (a.success!=='false'?'<span style="color:#56d364">✓ success</span>':'<span style="color:#ef4444">✗ failed</span>');
-  } else if(item.type==='rig'){
-    html='<b>Rig: '+item.rigName+'</b><br>Click to collapse/expand';
+  for(var i=0;i<rows.length;i++){
+    var row=rows[i], ev=row.ev, run=row.run;
+    var d=new Date(ev.timestamp);
+    var ts=pad2(d.getHours())+':'+pad2(d.getMinutes())+':'+pad2(d.getSeconds());
+    var dur=ev.attrs&&ev.attrs.duration_ms?fmtMs(parseFloat(ev.attrs.duration_ms)):'';
+    var isSel=(selectedRow&&selectedRow.ev.id===ev.id);
+    var agentLabel=(run.agent_name||run.role||'').substring(0,14);
+    html+='<tr class="wf-row'+(ev.severity==='error'?' err-row':'')+(isSel?' wf-sel':'')+'" data-i="'+i+'">'
+      +'<td class="mono dim" style="font-size:10px">'+ts+'</td>'
+      +'<td>'+evBadge(ev.body)+'</td>'
+      +'<td class="mono" title="'+esc(run.agent_name||run.role||'')+'"><span style="color:'+rc(run.role)+'">'+esc(agentLabel)+'</span></td>'
+      +'<td class="mono dim" style="font-size:10px">'+esc(row.rigName||'')+'</td>'
+      +'<td class="mono">'+evDetail(ev)+'</td>'
+      +'<td class="mono dim" style="font-size:10px">'+dur+'</td>'
+      +'<td>'+makeWfBar(ev,range)+'</td>'
+      +'</tr>';
   }
-  if(!html) return;
-  tip.innerHTML=html;
-  tip.style.display='block';
-  tip.style.left=(e.clientX+14)+'px';
-  tip.style.top=(e.clientY-10)+'px';
-  // Clamp to viewport right edge
-  var tw=tip.offsetWidth;
-  if(e.clientX+14+tw>window.innerWidth) tip.style.left=(e.clientX-tw-14)+'px';
+
+  var capturedRows=rows;
+  var tbody=document.getElementById('wf-tbody');
+  tbody.innerHTML=html;
+  var trs=tbody.querySelectorAll('tr');
+  for(var j=0;j<trs.length;j++){
+    (function(tr,row){ tr.addEventListener('click',function(){ showDetail(row); }); })(trs[j],capturedRows[j]);
+  }
+
+  var countEl=document.getElementById('wf-row-count');
+  if(countEl) countEl.textContent=(capped?MAX_ROWS+' / ':'')+total+' events';
 }
-function hideTip(){ tip.style.display='none'; }
 
-// ── Detail panel ──────────────────────────────────────────────────────────────
-var panelRun=null, panelFilter='all', panelHighlight=null;
+function makeWfBar(ev, range){
+  var t=new Date(ev.timestamp).getTime();
+  var x=((t-vStart)/range)*100;
+  if(x<0||x>100) return '';
+  var dur=ev.attrs&&ev.attrs.duration_ms?parseFloat(ev.attrs.duration_ms):0;
+  var w=dur>0?Math.max(2,(dur/range)*100):2;
+  var color='#f59e0b';
+  if(ev.body==='claude_code.tool_result') color=(ev.attrs&&ev.attrs.success!=='false')?'#10b981':'#ef4444';
+  else if(ev.body==='agent.event')        color='#8b5cf6';
+  else if(ev.body==='bd.call')            color='#3b82f6';
+  else if(ev.body==='sling'||ev.body==='mail') color='#eab308';
+  else if(ev.body==='done'||ev.body==='session.stop') color='#56d364';
+  else if(ev.body==='agent.instantiate'||ev.body==='session.start') color='#06b6d4';
+  return '<div class="wf-bar-outer"><div class="wf-bar-inner" style="left:'+x.toFixed(1)+'%;width:'+w.toFixed(1)+'%;background:'+color+'"></div></div>';
+}
 
+// ── Event helpers ─────────────────────────────────────────────────────────────
 function evBadge(body){
   var m={
     'agent.event':'ev-agent','claude_code.api_request':'ev-api',
@@ -769,100 +327,202 @@ function evBadge(body){
 
 function evDetail(ev){
   var a=ev.attrs||{};
-  if(ev.body==='agent.event')
-    return esc((a.content||'').substring(0,140));
-  if(ev.body==='bd.call')
-    return esc(((a.subcommand||'')+' '+(a.args||'')).substring(0,100));
-  if(ev.body==='claude_code.api_request')
-    return esc((a.model||'')+' in:'+(a.input_tokens||0)+' out:'+(a.output_tokens||0)+' $'+parseFloat(a.cost_usd||0).toFixed(4));
-  if(ev.body==='claude_code.tool_result')
-    return esc((a.tool_name||'')+' '+(a.success!=='false'?'✓':'✗')+' '+fmtMs(parseFloat(a.duration_ms||0)));
-  if(ev.body==='mail')
-    return esc(((a.operation||'')+' '+ato(a,'msg.from')+' → '+ato(a,'msg.to')+': '+ato(a,'msg.subject')).substring(0,100));
-  if(ev.body==='prompt.send')
-    return esc((a.keys_len||0)+' bytes'+(a.keys?' — '+a.keys.substring(0,80):''));
-  if(ev.body==='done') return esc(a.exit_type||'');
-  if(ev.body==='prime') return esc((a.formula||'').substring(0,80));
-  var keys=Object.keys(a).filter(function(k){return k!=='run.id'&&!k.startsWith('gt.');}).slice(0,4);
+  if(ev.body==='agent.event')             return esc((a.content||'').substring(0,120));
+  if(ev.body==='bd.call')                 return esc(((a.subcommand||'')+' '+(a.args||'')).substring(0,100));
+  if(ev.body==='claude_code.api_request') return esc((a.model||'')+' in:'+(a.input_tokens||0)+' out:'+(a.output_tokens||0)+' $'+parseFloat(a.cost_usd||0).toFixed(4));
+  if(ev.body==='claude_code.tool_result') return esc((a.tool_name||'')+' '+(a.success!=='false'?'✓':'✗')+' '+fmtMs(parseFloat(a.duration_ms||0)));
+  if(ev.body==='mail')                    return esc(((a.operation||'')+' '+(a['msg.from']||'')+' → '+(a['msg.to']||'')+': '+(a['msg.subject']||'')).substring(0,100));
+  if(ev.body==='prompt.send')             return esc((a.keys_len||0)+' bytes'+(a.keys?' — '+a.keys.substring(0,60):''));
+  if(ev.body==='done')                    return esc(a.exit_type||'');
+  if(ev.body==='prime')                   return esc((a.formula||'').substring(0,80));
+  var keys=Object.keys(a).filter(function(k){return k!=='run.id'&&!k.startsWith('gt.');}).slice(0,5);
   return esc(keys.map(function(k){return k+'='+a[k];}).join(' '));
 }
 
-function ato(a,k){ return a[k]||''; }
+// ── Detail panel ──────────────────────────────────────────────────────────────
+function showDetail(row){
+  selectedRow=row;
+  var ev=row.ev, run=row.run, attrs=ev.attrs||{};
 
-function openPanel(run, filter, highlightId){
-  panelRun=run; panelFilter=filter||'all'; panelHighlight=highlightId||null;
-  renderPanel();
-  detPanel.style.display='flex';
-  rebuildRows(); draw();
-}
-
-function renderPanel(){
-  var run=panelRun;
-  var evs=run.events||[];
-  var apiN=evs.filter(function(e){return e.body==='claude_code.api_request';}).length;
-  var toolN=evs.filter(function(e){return e.body==='claude_code.tool_result';}).length;
-  var commN=evs.filter(function(e){
-    return e.body==='sling'||e.body==='mail'||e.body==='nudge'||e.body==='done'||e.body==='agent.event';
-  }).length;
-  var dur=run.duration_ms?fmtMs(run.duration_ms):(run.running?'running':'—');
-
-  var tabs=[['all','All ('+evs.length+')'],['api','API ('+apiN+')'],['tool','Tools ('+toolN+')'],['comm','Comms ('+commN+')']];
-  var tabHtml='<div class="wf2-tabs">';
-  for(var i=0;i<tabs.length;i++){
-    var t=tabs[i][0];
-    tabHtml+='<button class="wf2-tab'+(panelFilter===t?' active':'')+'" onclick="switchTab(\''+t+'\')">'+tabs[i][1]+'</button>';
-  }
-  tabHtml+='</div>';
-
-  var filtered=panelFilter==='api'?evs.filter(function(e){return e.body==='claude_code.api_request';}):
-    panelFilter==='tool'?evs.filter(function(e){return e.body==='claude_code.tool_result';}):
-    panelFilter==='comm'?evs.filter(function(e){return e.body==='sling'||e.body==='mail'||e.body==='nudge'||e.body==='done'||e.body==='agent.event';}):
-    evs;
-
-  var hlIdx=-1;
-  var tableHtml='<table><thead><tr><th>Time</th><th>Event</th><th>Detail</th></tr></thead><tbody>';
-  for(var j=0;j<filtered.length;j++){
-    var ev=filtered[j];
-    var isHl=(ev.id===panelHighlight);
-    if(isHl) hlIdx=j;
-    var d=new Date(ev.timestamp);
-    var ts=pad2(d.getHours())+':'+pad2(d.getMinutes())+':'+pad2(d.getSeconds());
-    tableHtml+='<tr id="ev-row-'+j+'" class="'+(ev.severity==='error'?'err-row':'')+(isHl?' wf2-hl':'')+'"><td class="mono dim">'+ts+'</td>'
-             +'<td>'+evBadge(ev.body)+'</td>'
-             +'<td class="mono">'+evDetail(ev)+'</td></tr>';
-  }
-  tableHtml+='</tbody></table>';
-
-  detContent.innerHTML='<div class="wf2-dhdr">'
-    +'<span><b>'+(run.agent_name||run.role)+'</b>'
-    +' &nbsp;|&nbsp; '+esc(run.role||'—')
-    +' &nbsp;·&nbsp; '+esc(run.rig||'town')+'</span>'
-    +'<span style="font-size:10px;color:#8b949e">'+fmtTime(run.started_at)+' · '+dur+(run.cost>0?' · $'+run.cost.toFixed(4):'')+'</span>'
+  var html='<div class="wf2-dhdr">'
+    +'<span>'+evBadge(ev.body)
+    +' &nbsp;<span style="color:'+rc(run.role)+';font-size:11px">'+esc(run.agent_name||run.role||'')+'</span></span>'
     +'<button onclick="closeDetail()">✕</button>'
-    +'</div>'
-    +tabHtml
-    +'<div class="wf2-devents">'+tableHtml+'</div>';
+    +'</div>';
+  html+='<div class="wf2-devents">';
 
-  if(hlIdx>=0){
-    setTimeout(function(){
-      var el=document.getElementById('ev-row-'+hlIdx);
-      if(el) el.scrollIntoView({block:'nearest'});
-    },0);
+  // Context
+  html+='<div class="wf2-section-hdr">Context</div>';
+  html+='<table>';
+  html+='<tr><th>Time</th><td class="mono" style="font-size:10px">'+esc(ev.timestamp)+'</td></tr>';
+  html+='<tr><th>Agent</th><td class="mono">'+esc(run.agent_name||'—')+'</td></tr>';
+  html+='<tr><th>Role</th><td><span style="color:'+rc(run.role)+'">'+esc(run.role||'—')+'</span></td></tr>';
+  html+='<tr><th>Rig</th><td class="mono">'+esc(row.rigName||'—')+'</td></tr>';
+  html+='<tr><th>Run ID</th><td class="mono" style="font-size:9px;word-break:break-all">'+esc(run.run_id||'—')+'</td></tr>';
+  if(run.session_id) html+='<tr><th>Session</th><td class="mono" style="font-size:9px;word-break:break-all">'+esc(run.session_id)+'</td></tr>';
+  if(ev.severity==='error') html+='<tr><th>Severity</th><td style="color:#ef4444">error</td></tr>';
+  html+='</table>';
+
+  // OTel attributes
+  var keys=Object.keys(attrs).sort();
+  if(keys.length>0){
+    html+='<div class="wf2-section-hdr">OTel Attributes</div>';
+    html+='<table>';
+    for(var i=0;i<keys.length;i++){
+      var k=keys[i], v=String(attrs[k]);
+      html+='<tr><th>'+esc(k)+'</th>';
+      if(v.length>100||v.indexOf('\n')>=0){
+        html+='<td><pre class="wf2-pre">'+esc(v.substring(0,4000))+'</pre></td>';
+      } else {
+        html+='<td class="mono" style="font-size:10px">'+esc(v)+'</td>';
+      }
+      html+='</tr>';
+    }
+    html+='</table>';
   }
+  html+='</div>';
+
+  detContent.innerHTML=html;
+  detPanel.style.display='flex';
+  renderTable();
 }
-
-function switchTab(filter){ panelFilter=filter; renderPanel(); }
-window.switchTab=switchTab;
-
-function showDetail(run){ openPanel(run,'all',null); }
-function showDetailAPI(ev, run){ openPanel(run,'api',ev.id); }
-function showDetailTool(ev, run){ openPanel(run,'tool',ev.id); }
 
 function closeDetail(){
   detPanel.style.display='none';
-  rebuildRows(); draw();
+  selectedRow=null;
+  renderTable();
 }
 window.closeDetail=closeDetail;
+
+// ── Overview canvas ───────────────────────────────────────────────────────────
+function ovX(t){ return ((t-fullStart)/(fullEnd-fullStart))*ovCanvas.width; }
+function ovT(x){ return fullStart+(x/ovCanvas.width)*(fullEnd-fullStart); }
+
+function drawOverview(){
+  var W=ovCanvas.width, H=ovCanvas.height;
+  if(!W||!H) return;
+  ovCtx.fillStyle='#0d1117';
+  ovCtx.fillRect(0,0,W,H);
+
+  // All runs as micro-bars (from full DATA for complete picture)
+  var allRuns=[];
+  for(var i=0;i<DATA.rigs.length;i++)
+    for(var j=0;j<DATA.rigs[i].runs.length;j++)
+      allRuns.push(DATA.rigs[i].runs[j]);
+
+  var barZone=H-14;
+  var laneH=allRuns.length>0?Math.max(1.5,Math.min(8,barZone/allRuns.length)):4;
+  for(var k=0;k<allRuns.length;k++){
+    var run=allRuns[k];
+    var st=new Date(run.started_at).getTime();
+    var et=run.ended_at?new Date(run.ended_at).getTime():fullEnd;
+    var x1=ovX(st), x2=Math.max(x1+1,ovX(et));
+    var y=2+k*laneH;
+    if(y>barZone) break;
+    ovCtx.fillStyle=rc(run.role)+'99';
+    ovCtx.fillRect(x1,y,x2-x1,Math.max(1,laneH-0.5));
+  }
+
+  // Dim outside selection
+  var sx1=ovX(vStart), sx2=ovX(vEnd);
+  ovCtx.fillStyle='rgba(0,0,0,0.55)';
+  if(sx1>0) ovCtx.fillRect(0,0,Math.max(0,sx1),H);
+  if(sx2<W) ovCtx.fillRect(sx2,0,W-sx2,H);
+
+  // Selection border + handles
+  ovCtx.strokeStyle='#58a6ff'; ovCtx.lineWidth=1;
+  ovCtx.strokeRect(sx1+0.5,0.5,Math.max(4,sx2-sx1)-1,H-1);
+  ovCtx.fillStyle='#58a6ff';
+  ovCtx.fillRect(sx1-1,0,3,H);
+  ovCtx.fillRect(sx2-2,0,3,H);
+
+  // Time ruler at bottom
+  var iv=niceInterval(fullEnd-fullStart,W);
+  var first=Math.ceil(fullStart/iv)*iv;
+  ovCtx.font='8px monospace'; ovCtx.textAlign='center';
+  for(var t=first;t<=fullEnd;t+=iv){
+    var x=ovX(t);
+    ovCtx.fillStyle='#30363d'; ovCtx.fillRect(x,H-14,1,4);
+    ovCtx.fillStyle='#8b949e'; ovCtx.fillText(rulerLabel(t),x,H-1);
+  }
+}
+
+function onOvMove(e){
+  var r=ovCanvas.getBoundingClientRect();
+  var x=e.clientX-r.left;
+  var sx1=ovX(vStart), sx2=ovX(vEnd);
+  if(Math.abs(x-sx1)<8||Math.abs(x-sx2)<8) ovCanvas.style.cursor='ew-resize';
+  else if(x>sx1&&x<sx2)                     ovCanvas.style.cursor='grab';
+  else                                       ovCanvas.style.cursor='crosshair';
+}
+
+function onOvDown(e){
+  var r=ovCanvas.getBoundingClientRect();
+  var x=e.clientX-r.left;
+  var sx1=ovX(vStart), sx2=ovX(vEnd);
+  if(Math.abs(x-sx1)<8){
+    ovDragMode='left';
+  } else if(Math.abs(x-sx2)<8){
+    ovDragMode='right';
+  } else if(x>sx1&&x<sx2){
+    ovDragMode='pan';
+  } else {
+    var t=ovT(x), half=(vEnd-vStart)/2;
+    vStart=t-half; vEnd=t+half;
+    drawOverview(); renderTable(); return;
+  }
+  ovDrag=true; ovDragX0=x; ovDragVS0=vStart; ovDragVE0=vEnd;
+  ovCanvas.style.cursor='grabbing';
+  e.preventDefault();
+}
+
+function onWinMove(e){
+  if(!ovDrag) return;
+  var r=ovCanvas.getBoundingClientRect();
+  var x=e.clientX-r.left;
+  var dt=(x-ovDragX0)/ovCanvas.width*(fullEnd-fullStart);
+  if(ovDragMode==='pan'){
+    vStart=ovDragVS0+dt; vEnd=ovDragVE0+dt;
+  } else if(ovDragMode==='left'){
+    vStart=Math.min(ovDragVS0+dt, ovDragVE0-1000);
+  } else {
+    vEnd=Math.max(ovDragVE0+dt, ovDragVS0+1000);
+  }
+  drawOverview(); renderTable();
+}
+
+function onWinUp(){ if(ovDrag){ ovDrag=false; ovCanvas.style.cursor='crosshair'; } }
+
+function onResize(){
+  var ovWrap=document.getElementById('wf-ov-wrap');
+  if(ovWrap) ovCanvas.width=ovWrap.clientWidth||900;
+  drawOverview();
+}
+
+// ── Filters ───────────────────────────────────────────────────────────────────
+function applyFilters(){
+  var params=new URLSearchParams(window.location.search);
+  ['rig','role','type','q'].forEach(function(k){
+    var v=document.getElementById('f-'+( k==='q'?'search':k)).value;
+    v?params.set(k,v):params.delete(k);
+  });
+  window.history.replaceState(null,'','?'+params.toString());
+  applyFiltersLocal();
+  buildAllEvents();
+  computeFullRange();
+  vStart=fullStart; vEnd=fullEnd;
+  populateTypeFilter();
+  renderTable();
+  drawOverview();
+}
+window.applyFilters=applyFilters;
+
+function resetFilters(){
+  var params=new URLSearchParams(window.location.search);
+  ['rig','role','type','q'].forEach(function(k){ params.delete(k); });
+  window.location.href='?'+params.toString();
+}
+window.resetFilters=resetFilters;
 
 // ── Summary ───────────────────────────────────────────────────────────────────
 function updateSummary(){
@@ -876,114 +536,6 @@ function updateSummary(){
 }
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 
-// ── Communication map (SVG) ───────────────────────────────────────────────────
-function buildCommMap(){
-  var svg=document.getElementById('wf-commsvg'); if(!svg) return;
-  var allRuns=[];
-  for(var i=0;i<DATA.rigs.length;i++)
-    for(var j=0;j<DATA.rigs[i].runs.length;j++)
-      allRuns.push(DATA.rigs[i].runs[j]);
-  if(!allRuns.length){
-    svg.innerHTML='<text x="8" y="20" fill="#8b949e" font-size="12">No runs in window</text>';
-    return;
-  }
-  var W=svg.parentElement.clientWidth||800;
-  var cols=Math.min(7,allRuns.length);
-  var rows2=Math.ceil(allRuns.length/cols);
-  var H=Math.max(120,rows2*90+40);
-  svg.setAttribute('viewBox','0 0 '+W+' '+H);
-  svg.setAttribute('width',W); svg.setAttribute('height',H);
-
-  var nr=26;
-  var nodePos={};
-  for(var i=0;i<allRuns.length;i++){
-    var col=i%cols;
-    var row=Math.floor(i/cols);
-    var gapX=cols>1?(W-80)/(cols-1):0;
-    var x=40+col*gapX;
-    var y=50+row*90;
-    nodePos[allRuns[i].run_id]={x:x,y:y};
-    if(allRuns[i].session_id) nodePos[allRuns[i].session_id]={x:x,y:y};
-  }
-
-  var edges={};
-  var comms=DATA.communications||[];
-  for(var k=0;k<comms.length;k++){
-    var c=comms[k]; if(!c.to) continue;
-    var key=c.from+'|'+c.to;
-    if(!edges[key]) edges[key]={from:c.from,to:c.to,count:0,type:c.type};
-    edges[key].count++;
-  }
-  var CC={sling:'#f59e0b',mail:'#eab308',nudge:'#8b5cf6',spawn:'#10b981',done:'#3b82f6'};
-
-  var s='<defs><marker id="ca" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto">'
-       +'<polygon points="0 0,7 2.5,0 5" fill="#8b949e"/></marker></defs>';
-
-  for(var key in edges){
-    var e2=edges[key];
-    var fp=nodePos[e2.from], tp=nodePos[e2.to];
-    if(!fp||!tp) continue;
-    var color=CC[e2.type]||'#9ca3af';
-    var lw=Math.min(3,1+e2.count*0.5);
-    if(fp===tp){
-      s+='<circle cx="'+(fp.x+nr+5)+'" cy="'+(fp.y-nr/2)+'" r="10" fill="none" stroke="'+color+'" stroke-width="'+lw+'" stroke-opacity="0.6"/>';
-    } else {
-      var mx=(fp.x+tp.x)/2, my=(fp.y+tp.y)/2;
-      s+='<line x1="'+fp.x+'" y1="'+fp.y+'" x2="'+tp.x+'" y2="'+tp.y
-         +'" stroke="'+color+'" stroke-width="'+lw+'" stroke-opacity="0.6" marker-end="url(#ca)"/>';
-      s+='<text x="'+mx+'" y="'+(my-3)+'" fill="'+color+'" font-size="8" text-anchor="middle" opacity="0.8">'+e2.count+'</text>';
-    }
-  }
-  for(var i=0;i<allRuns.length;i++){
-    var run=allRuns[i], p=nodePos[run.run_id]; if(!p) continue;
-    var color=rc(run.role);
-    s+='<circle cx="'+p.x+'" cy="'+p.y+'" r="'+nr+'" fill="'+color+'22" stroke="'+color+'" stroke-width="1.5"/>';
-    s+='<text x="'+p.x+'" y="'+(p.y-5)+'" fill="'+color+'" font-size="10" font-weight="bold" text-anchor="middle">'
-      +esc((run.role||'?').substring(0,6))+'</text>';
-    s+='<text x="'+p.x+'" y="'+(p.y+9)+'" fill="#8b949e" font-size="8" text-anchor="middle">'
-      +esc((run.agent_name||'').substring(0,10))+'</text>';
-    if(run.rig){
-      s+='<text x="'+p.x+'" y="'+(p.y+20)+'" fill="#58a6ff" font-size="7" text-anchor="middle">'+esc(run.rig)+'</text>';
-    }
-  }
-  svg.innerHTML=s;
-}
-
-// ── Filters ───────────────────────────────────────────────────────────────────
-function applyFilters(){
-  var params=new URLSearchParams(window.location.search);
-  var rig=document.getElementById('f-rig').value;
-  var role=document.getElementById('f-role').value;
-  var q=document.getElementById('f-search').value;
-  if(rig)  params.set('rig',rig);   else params.delete('rig');
-  if(role) params.set('role',role); else params.delete('role');
-  if(q)    params.set('q',q);       else params.delete('q');
-  window.history.replaceState(null,'','?'+params.toString());
-  applyFiltersLocal();
-  computeTimeRange();
-  computeFullRange();
-  rebuildRows();
-  buildCommMap();
-  draw(); drawOverview();
-}
-window.applyFilters=applyFilters;
-
-function resetFilters(){
-  var params=new URLSearchParams(window.location.search);
-  params.delete('rig'); params.delete('role'); params.delete('q');
-  window.location.href='?'+params.toString();
-}
-window.resetFilters=resetFilters;
-
-// ── Comm map toggle ───────────────────────────────────────────────────────────
-function toggleCommMap(){
-  var body=document.getElementById('wf-commmap-body');
-  var arrow=document.getElementById('wf-cmarrow');
-  if(body.style.display==='none'){body.style.display='block';arrow.textContent='▼';}
-  else{body.style.display='none';arrow.textContent='▶';}
-}
-window.toggleCommMap=toggleCommMap;
-
 // ── Utilities ─────────────────────────────────────────────────────────────────
 function pad2(n){ return n.toString().padStart(2,'0'); }
 function fmtMs(ms){
@@ -991,12 +543,19 @@ function fmtMs(ms){
   if(ms<60000) return (ms/1000).toFixed(1)+'s';
   return Math.floor(ms/60000)+'m'+Math.floor((ms%60000)/1000)+'s';
 }
-function fmtTime(ts){
-  var d=new Date(ts);
-  return pad2(d.getHours())+':'+pad2(d.getMinutes())+':'+pad2(d.getSeconds());
-}
 function esc(s){
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function niceInterval(rangeMs,pixW){
+  var ivs=[500,1000,2000,5000,10000,15000,30000,60000,120000,300000,600000,1800000,3600000,7200000];
+  for(var i=0;i<ivs.length;i++){
+    if(pixW/(rangeMs/ivs[i])>=70) return ivs[i];
+  }
+  return ivs[ivs.length-1];
+}
+function rulerLabel(t){
+  var d=new Date(t), r=fullEnd-fullStart;
+  return pad2(d.getHours())+':'+(r<90000?pad2(d.getMinutes())+':'+pad2(d.getSeconds()):pad2(d.getMinutes()));
 }
 
 window.addEventListener('load', init);
