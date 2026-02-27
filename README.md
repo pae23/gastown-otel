@@ -169,6 +169,8 @@ Example Grafana query to filter metrics for a specific rig:
 | `gastown_daemon_agent_restarts_total` | counter | Daemon-initiated agent restarts |
 | `gastown_formula_instantiations_total` | counter | Formula instantiations |
 | `gastown_convoy_creates_total` | counter | Auto-convoy creations |
+| `gastown_mol_cooks_total` | counter | Formula-to-proto compilations |
+| `gastown_mol_wisps_total` | counter | Wisp instantiations |
 
 ## bd Metrics (`bd_*`)
 
@@ -197,7 +199,7 @@ Every gt operation emits **both** a metric (VictoriaMetrics) and a log event (Vi
 | `pane.read` | `session`, `lines_requested`, `content_len` | tmux pane read |
 | `prime` | `role`, `hook_mode`, `status` | `gt prime` |
 | `prime.context` | `role`, `hook_mode`, `formula` | Full formula text rendered by `gt prime` |
-| `agent.state_change` | `agent_id`, `new_state`, `has_hook_bead` | Agent state transition |
+| `agent.state_change` | `agent_id`, `new_state`, `hook_bead` | Agent state transition |
 | `polecat.spawn` | `name`, `status` | Polecat start |
 | `polecat.remove` | `name`, `status` | Polecat removal |
 | `sling` | `bead`, `target`, `status` | `gt sling` dispatch |
@@ -207,6 +209,11 @@ Every gt operation emits **both** a metric (VictoriaMetrics) and a log event (Vi
 | `daemon.restart` | `agent_type` | Daemon-initiated agent restart |
 | `formula.instantiate` | `formula_name`, `bead_id`, `status` | Formula instantiation |
 | `convoy.create` | `bead_id`, `status` | Auto-convoy creation |
+| `mol.cook` | `formula_name`, `status` | Formula compiled to a proto (prerequisite for wisp creation) |
+| `mol.wisp` | `formula_name`, `wisp_root_id`, `bead_id`, `status` | Proto instantiated as a live wisp |
+| `mol.squash` | `mol_id`, `done_steps`, `total_steps`, `digest_created`, `status` | Molecule execution completed and collapsed to a digest |
+| `mol.burn` | `mol_id`, `children_closed`, `status` | Molecule destroyed without creating a digest |
+| `bead.create` | `bead_id`, `parent_id`, `mol_source` | Child bead created during molecule instantiation |
 
 ### Privacy-sensitive env vars
 
