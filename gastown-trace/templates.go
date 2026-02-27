@@ -92,6 +92,7 @@ details pre{margin-top:4px;background:#0d1117;padding:8px;border-radius:4px;bord
 <nav>
   <span class="brand">🏙 Gastown Trace</span>
   <a href="/waterfall">Waterfall</a>
+  <a href="/waterfall_overview">Overview</a>
   {{- /*
   <a href="/">Dashboard</a>
   <a href="/flow">Flow</a>

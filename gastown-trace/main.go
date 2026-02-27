@@ -570,6 +570,7 @@ func main() {
 	mux.HandleFunc("/", handleDashboard)
 	mux.HandleFunc("/flow", handleFlow)
 	mux.HandleFunc("/waterfall", handleWaterfallV2)
+	mux.HandleFunc("/waterfall_overview", handleWaterfallOverview)
 	mux.HandleFunc("/api/waterfall.json", handleWaterfallV2JSON)
 	mux.HandleFunc("/bead/", handleBead)
 	mux.HandleFunc("/sessions", handleSessions)
