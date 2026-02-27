@@ -1,206 +1,212 @@
 # Spec: Gastown Waterfall v2 — Chrome DevTools-style Agent Orchestration View
 
-> **Référence autoritaire** : `/Users/pa/dev/third-party/gastown/docs/waterfall-spec.md`
-> Ce document étend la référence avec les contraintes d'implémentation Go/frontend de `gastown-trace`.
+> **Authoritative reference**: `/Users/pa/dev/third-party/gastown/docs/waterfall-spec.md`
+> This document extends the reference with Go/frontend implementation constraints for `gastown-trace`.
 
 ---
 
 ## Context
 
-Gastown est un système d'orchestration multi-agents tournant des agents Claude Code dans des sessions tmux. Les agents ont des rôles (mayor, deacon, witness, refinery, polecat, dog, boot, crew) et sont organisés en **rigs** (ex. `fai`, `mol`, `gt-wyvern`). Ils communiquent via **beads** (items de travail gérés par `bd`), **mails**, **slings** (dispatches de beads), et **prompts** envoyés dans des panes tmux.
+Gastown is a multi-agent orchestration system running Claude Code agents in tmux sessions. Agents have roles (mayor, deacon, witness, refinery, polecat, dog, boot, crew) and are organised into **rigs** (e.g. `fai`, `mol`, `gt-wyvern`). They communicate via **beads** (work items managed by `bd`), **mails**, **slings** (bead dispatches), and **prompts** sent into tmux panes.
 
-Toute la télémétrie est dans VictoriaLogs (logs OTLP structurés) interrogée via LogsQL. L'outil Go `gastown-trace` existant requête VictoriaLogs et rend des vues HTML. La page `/waterfall` actuelle est un prototype — cette spec la remplace entièrement.
+All telemetry lives in VictoriaLogs (structured OTLP logs) queried via LogsQL. The Go tool `gastown-trace` queries VictoriaLogs and renders HTML views. The current `/waterfall` page is a prototype — this spec replaces it entirely.
 
-### Clé primaire : `run.id`
+### Primary key: `run.id`
 
-Chaque spawn d'agent génère un UUID unique — le **`run.id`** (`GT_RUN`) — propagé dans l'environnement tmux et dans `OTEL_RESOURCE_ATTRIBUTES` pour tous les sous-processus `bd`. C'est la clé de corrélation universelle sur tous les événements d'un run. **Toute logique de corrélation doit préférer `run.id` aux anciens champs `_stream`.**
+Each agent spawn generates a unique UUID — the **`run.id`** (`GT_RUN`) — propagated into the tmux environment and into `OTEL_RESOURCE_ATTRIBUTES` for all `bd` sub-processes. It is the universal correlation key across all events in a run. **All correlation logic must prefer `run.id` over legacy `_stream` fields.**
 
 ---
 
 ## Goal
 
-Construire une vue style **Chrome DevTools Network Waterfall** sur `/waterfall` qui montre la timeline complète d'une instance Gastown : chaque session agent, chaque échange inter-agents, chaque appel API — disposés horizontalement sur un axe temps partagé, avec filtrage interactif, drill-down, et visualisation des flux de communication.
+Build a **Chrome DevTools Network Waterfall**-style view at `/waterfall` showing the complete timeline of a Gastown instance: every agent session, every inter-agent exchange, every API call — laid out horizontally on a shared time axis, with interactive filtering, drill-down, and communication-flow visualisation.
 
-Penser : Azure DevOps pipeline view × Chrome Network tab — pour un swarm d'agents IA.
+Think: Azure DevOps pipeline view × Chrome Network tab — for an AI agent swarm.
 
 ---
 
-## Data Sources (événements VictoriaLogs)
+## Data Sources (VictoriaLogs events)
 
-Toutes les données viennent d'appels `vlQuery()`. Types d'événements disponibles :
+All data comes from `vlQuery()` calls. Available event types:
 
-| Événement | Champs clés | Ce qu'il représente |
-|-----------|------------|---------------------|
-| `agent.instantiate` | `run.id`, `instance`, `town_root`, `agent_type`, `role`, `agent_name`, `session_id`, `rig` | **Racine de chaque run** — émis une fois par spawn |
-| `session.start` | `run.id`, `session_id`, `role`, `status` | Session agent démarrée dans tmux |
-| `session.stop` | `run.id`, `session_id`, `role`, `status` | Session agent terminée |
-| `prime` | `run.id`, `role`, `hook_mode`, `formula`, `status` | Injection contexte de démarrage (formule TOML rendue) |
-| `bd.call` | `run.id`, `subcommand`, `args`, `stdout`, `stderr`, `duration_ms`, `status` | Opération CLI bd |
-| `claude_code.api_request` | `session.id`, `model`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cost_usd`, `duration_ms` | Appel API LLM *(source : instrumentation OTEL de claude-code, indépendante de gastown)* |
-| `claude_code.tool_result` | `session.id`, `tool_name`, `tool_parameters`, `duration_ms`, `success` | Exécution d'outil *(source : idem)* |
-| `agent.event` | `run.id`, `session`, `native_session_id`, `agent_type`, `event_type`, `role` *(LLM role : `"assistant"` / `"user"`*, ≠ rôle Gastown)`, `content` | Tour de conversation agent (texte/tool_use/tool_result/thinking) |
-| `prompt.send` | `run.id`, `session`, `keys_len`, `debounce_ms`, `status` | Prompt injecté dans l'agent via tmux *(le texte complet `keys` est à ajouter — P1)* |
-| `pane.output` | `run.id`, `session`, `content` | Sortie brute tmux *(opt-in : `GT_LOG_PANE_OUTPUT=true`)* |
-| `sling` | `run.id`, `bead`, `target`, `status` | Bead dispatché d'un agent à un autre |
-| `mail` | `run.id`, `operation`, `msg.id`, `msg.from`, `msg.to`, `msg.subject`, `msg.body`, `msg.thread_id`, `msg.priority`, `msg.type`, `status` | Opération mail inter-agents |
-| `nudge` | `run.id`, `target`, `status` | Agent relancé (nudge) |
-| `polecat.spawn` | `run.id`, `name`, `status` | Sous-agent polecat spawné |
-| `polecat.remove` | `run.id`, `name`, `status` | Polecat retiré |
-| `done` | `run.id`, `exit_type` (COMPLETED/ESCALATED/DEFERRED), `status` | Agent a terminé son item de travail |
-| `formula.instantiate` | `run.id`, `formula_name`, `bead_id`, `status` | Template de travail instancié |
-| `convoy.create` | `run.id`, `bead_id`, `status` | Auto-convoy (batch) créé |
-| `daemon.restart` | `run.id`, `agent_type` | Daemon redémarré |
+| Event | Key fields | What it represents |
+|-------|-----------|-------------------|
+| `agent.instantiate` | `run.id`, `instance`, `town_root`, `agent_type`, `role`, `agent_name`, `session_id`, `rig` | **Root of each run** — emitted once per spawn |
+| `session.start` | `run.id`, `session_id`, `role`, `status` | Agent session started in tmux |
+| `session.stop` | `run.id`, `session_id`, `role`, `status` | Agent session stopped |
+| `prime` | `run.id`, `role`, `hook_mode`, `formula`, `status` | Startup context injection (rendered TOML formula) |
+| `bd.call` | `run.id`, `subcommand`, `args`, `stdout`, `stderr`, `duration_ms`, `status` | bd CLI operation |
+| `claude_code.api_request` | `session.id`, `model`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cost_usd`, `duration_ms` | LLM API call *(source: claude-code OTEL instrumentation, independent of gastown)* |
+| `claude_code.tool_result` | `session.id`, `tool_name`, `tool_parameters`, `duration_ms`, `success` | Tool execution *(source: same)* |
+| `agent.event` | `run.id`, `session`, `native_session_id`, `agent_type`, `event_type`, `role` *(LLM role: `"assistant"` / `"user"`, ≠ Gastown role)*, `content` | Agent conversation turn (text/tool_use/tool_result/thinking) |
+| `agent.state_change` | `run.id`, `agent_id`, `new_state`, `hook_bead` | Agent state transition; `hook_bead` is the bead ID being processed (empty string if none) |
+| `prompt.send` | `run.id`, `session`, `keys_len`, `debounce_ms`, `status` | Prompt injected into agent via tmux *(full text `keys` is P1)* |
+| `pane.output` | `run.id`, `session`, `content` | Raw tmux pane output *(opt-in: `GT_LOG_PANE_OUTPUT=true`)* |
+| `sling` | `run.id`, `bead`, `target`, `status` | Bead dispatched from one agent to another |
+| `mail` | `run.id`, `operation`, `msg.id`, `msg.from`, `msg.to`, `msg.subject`, `msg.body`, `msg.thread_id`, `msg.priority`, `msg.type`, `status` | Inter-agent mail operation |
+| `nudge` | `run.id`, `target`, `status` | Agent nudged (re-triggered) |
+| `polecat.spawn` | `run.id`, `name`, `status` | Polecat sub-agent spawned |
+| `polecat.remove` | `run.id`, `name`, `status` | Polecat removed |
+| `done` | `run.id`, `exit_type` (COMPLETED/ESCALATED/DEFERRED), `status` | Agent completed its work item |
+| `formula.instantiate` | `run.id`, `formula_name`, `bead_id`, `status` | Work template instantiated |
+| `convoy.create` | `run.id`, `bead_id`, `status` | Auto-convoy (batch) created |
+| `daemon.restart` | `run.id`, `agent_type` | Daemon restarted |
+| `mol.cook` | `run.id`, `formula_name`, `status` | Formula compiled to a proto (prerequisite for wisp creation) |
+| `mol.wisp` | `run.id`, `formula_name`, `wisp_root_id`, `bead_id`, `status` | Proto instantiated as a live wisp; `bead_id` empty for standalone formula slinging |
+| `mol.squash` | `run.id`, `mol_id`, `done_steps`, `total_steps`, `digest_created`, `status` | Molecule execution completed and collapsed to a digest |
+| `mol.burn` | `run.id`, `mol_id`, `children_closed`, `status` | Molecule destroyed without creating a digest |
+| `bead.create` | `run.id`, `bead_id`, `parent_id`, `mol_source` | Child bead created during molecule instantiation |
 
-> ⚠️ **Incohérence résolue — `mail`** : la V1 de ce spec ne listait que `operation` et `status`. Le schéma complet ci-dessus est celui de la référence (`waterfall-spec.md §1.3`). Utiliser `RecordMailMessage` pour les opérations avec contenu, `RecordMail` pour les opérations sans (list, archive-by-id).
+> **Note — `mail`**: use `RecordMailMessage` for operations where the message is available (send, read); use `RecordMail` for content-less operations (list, archive-by-id). A targeted query `mail AND operation:send` is needed alongside the generic `mail` query because `bd.list` / `bd.mol` operations vastly outnumber `send` events and can push them past the per-query limit.
 
-> ⚠️ **Incohérence résolue — `agent.event.role`** : ce champ désigne le **rôle LLM** (`"assistant"` ou `"user"`), pas le rôle Gastown (mayor/witness/…). Le rôle Gastown est dans `agent.instantiate.role` et propagé via `gt.role` dans les `_stream` fields.
+> **Note — `agent.event.role`**: this field is the **LLM role** (`"assistant"` or `"user"`), not the Gastown role (mayor/witness/…). The Gastown role is on `agent.instantiate.role` and propagated via `gt.role` in `_stream` fields.
 
-> ⚠️ **Incohérence résolue — `session.start`** : la V1 listait `gt.topic`, `gt.prompt`, `gt.agent` sur cet événement. Ces champs ne sont pas dans la référence. Ils proviennent d'une version antérieure des `_stream` fields. Les ignorer pour la logique de corrélation — préférer `agent.instantiate`.
+> **Note — `session.start`**: v1 of this spec listed `gt.topic`, `gt.prompt`, `gt.agent` on this event. These fields are not in the reference; they come from an older `_stream` fields version. Ignore them for correlation logic — prefer `agent.instantiate`.
 
-### Attributs de ressource sur tous les événements
+### Resource attributes on all events
 
-Deux systèmes coexistent — préférer les **attributs directs** (nouveau modèle) aux **`_stream` fields** (legacy) :
+Two systems coexist — prefer **direct attributes** (new model) over **`_stream` fields** (legacy):
 
-**Attributs directs (nouveau modèle, autoritaire) :**
-- `run.id` — UUID run (clé primaire)
-- `instance` — `hostname:basename(town_root)` (ex. `laptop:gt`)
-- `role` — rôle Gastown (mayor, witness, polecat, …)
-- `rig` — nom du rig (vide = town-level)
-- `session_id` — nom de la pane tmux
+**Direct attributes (new model, authoritative):**
+- `run.id` — run UUID (primary key)
+- `instance` — `hostname:basename(town_root)` (e.g. `laptop:gt`)
+- `role` — Gastown role (mayor, witness, polecat, …)
+- `rig` — rig name (empty = town-level)
+- `session_id` — tmux pane name
 
-**`_stream` fields (legacy, utiles pour les anciens events) :**
+**`_stream` fields (legacy, useful for older events):**
 - `gt.role`, `gt.rig`, `gt.session`, `gt.actor`, `gt.agent`, `gt.town`
 
 ---
 
 ## Layout
 
-### Deux niveaux de vue
+### Two levels of view
 
-**Niveau 1 : Vue instance** (`/waterfall`) — Swim lanes de tous les runs actifs/récents, groupés par rig, sur un axe temps partagé.
+**Level 1: Instance view** (`/waterfall`) — Swim lanes of all active/recent runs, grouped by rig, on a shared time axis.
 
-**Niveau 2 : Vue run detail** (`/waterfall?run=<uuid>` ou panneau de détail au clic) — Timeline hiérarchique d'un run individuel, depuis `agent.instantiate` jusqu'à `session.stop`.
+**Level 2: Run detail view** (`/waterfall?run=<uuid>` or detail panel on click) — Hierarchical timeline of an individual run from `agent.instantiate` to `session.stop`.
 
-### Structure globale
+### Global structure
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│ nav: [Dashboard] [Flow] [Waterfall*] [Sessions] [Beads] ...       │
-│      window: [1h] [24h] [7d] [30d] [custom range]                 │
+│ nav: [Dashboard] [Flow] [Waterfall*] [Sessions] [Beads] ...        │
+│      window: [1h] [24h] [7d] [30d] [custom range]                  │
 ├─────────────────────────────────────────────────────────────────────┤
-│ INSTANCE: laptop:gt   town: /Users/pa/gt                           │
-│ FILTERS BAR                                                        │
-│ [Rig ▼] [Role ▼] [Agent ▼] [Event types ▼] [Search ___________]  │
+│ INSTANCE: laptop:gt   town: /Users/pa/gt                            │
+│ FILTERS BAR                                                         │
+│ [Rig ▼] [Role ▼] [Agent ▼] [Event types ▼] [Search ___________]   │
 ├─────────────────────────────────────────────────────────────────────┤
-│ SUMMARY CARDS                                                      │
-│ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐           │
-│ │ 12   │ │ 3    │ │ 847  │ │ 42   │ │$1.23 │ │ 2m30s│           │
-│ │ Runs │ │ Rigs │ │Events│ │Beads │ │ Cost │ │ Span │           │
-│ └──────┘ └──────┘ └──────┘ └──────┘ └──────┘ └──────┘           │
+│ SUMMARY CARDS                                                       │
+│ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐            │
+│ │ 12   │ │ 3    │ │ 847  │ │ 42   │ │$1.23 │ │ 2m30s│            │
+│ │ Runs │ │ Rigs │ │Events│ │Beads │ │ Cost │ │ Span │            │
+│ └──────┘ └──────┘ └──────┘ └──────┘ └──────┘ └──────┘            │
 ├──────────────┬──────────────────────────────────────────────────────┤
-│ SWIM LANES   │  TIME AXIS ──────────────────────────────────►      │
-│              │  0s    30s    1m     1m30   2m     2m30    3m       │
+│ SWIM LANES   │  TIME AXIS ──────────────────────────────────►       │
+│              │  0s    30s    1m     1m30   2m     2m30    3m        │
 │──────────────┼──────────────────────────────────────────────────────│
-│              │                                                      │
-│ ── fai ──    │  (rig header, collapsible)                          │
-│              │                                                      │
-│ fai/mayor    │  ████████████████████████████████████████████████── │
-│   API calls  │    ▪▪  ▪▪▪  ▪▪    ▪▪▪▪▪   ▪▪  ▪▪▪  ▪▪           │
-│   tools      │     ◆  ◆◆    ◆      ◆◆◆    ◆    ◆               │
-│              │        ╔══▶ sling:bead-42 ══════════▶               │
-│ fai/deacon   │         ░░░░░░░░░░░░░░░░░░░░░░░░────              │
-│   API calls  │           ▪▪  ▪▪▪   ▪▪▪  ▪▪▪                      │
-│              │              ╔══▶ mail → fai/witness ══▶            │
-│ fai/witness  │               ░░░░░░░░░░░░░░░░░░░──                │
-│   API calls  │                 ▪▪  ▪▪  ▪▪  ▪▪                     │
-│              │                                                      │
-│ ── mol ──    │  (rig header, collapsible)                          │
-│              │                                                      │
+│              │                                                       │
+│ ── fai ──    │  (rig header, collapsible)                           │
+│              │                                                       │
+│ fai/mayor    │  ████████████████████████████████████████████████──  │
+│   API calls  │    ▪▪  ▪▪▪  ▪▪    ▪▪▪▪▪   ▪▪  ▪▪▪  ▪▪             │
+│   tools      │     ◆  ◆◆    ◆      ◆◆◆    ◆    ◆                  │
+│              │        ╔══▶ sling:bead-42 ══════════▶                │
+│ fai/deacon   │         ░░░░░░░░░░░░░░░░░░░░░░░░────                │
+│   API calls  │           ▪▪  ▪▪▪   ▪▪▪  ▪▪▪                       │
+│              │              ╔══▶ mail → fai/witness ══▶             │
+│ fai/witness  │               ░░░░░░░░░░░░░░░░░░░──                 │
+│   API calls  │                 ▪▪  ▪▪  ▪▪  ▪▪                      │
+│              │                                                       │
+│ ── mol ──    │  (rig header, collapsible)                           │
+│              │                                                       │
 │ mol/witness  │       ██████████████████████████████████████████──── │
-│ mol/polecat  │              ░░░░░░░░░░░░░░──                       │
-│   ↑jana      │              ░░░░░░░░░──                            │
-│              │                                                      │
+│ mol/polecat  │              ░░░░░░░░░░░░░░──                        │
+│   ↑jana      │              ░░░░░░░░░──                             │
+│              │                                                       │
 ├──────────────┴──────────────────────────────────────────────────────┤
-│ DETAIL PANEL (clic sur n'importe quel élément)                     │
-│ ┌───────────────────────────────────────────────────────────────┐  │
-│ │ Run: 6ba7b810…  Role: witness  Rig: fai  Agent: witness      │  │
-│ │ Started: 14:32:05  Duration: 1m42s  Cost: $0.3241            │  │
-│ │                                                               │  │
-│ │ [14:32:01] ● instantiate   claudecode/fai-witness             │  │
-│ │ [14:32:05] ─ session.start                                   │  │
-│ │ [14:32:06]   prime         polecat formula (2 KB)            │  │
-│ │ [14:32:06] ▶ prompt.send   "You have bead gt-abc…"          │  │
-│ │ [14:32:08] ◀ thinking      847 chars                         │  │
-│ │ [14:32:10] ◀ text          "I'll review the assigned bead…"  │  │
-│ │ [14:32:11] 🔧 tool_use     bd list --assignee=fai/witness    │  │
-│ │ [14:32:11]   bd.call       list (38ms) ✓                     │  │
-│ │ [14:32:11] ↩ tool_result   [{id:"bead-42"…}]                │  │
-│ │ [14:32:15] 🔧 tool_use     Bash "git diff HEAD~1"            │  │
-│ │ [14:32:18] ↩ tool_result   (320 lines)                       │  │
-│ │ [14:32:25] ◀ text          "The changes look correct…"       │  │
-│ │ [14:32:26] 🔧 tool_use     bd update bead-42 --status=done   │  │
-│ │ [14:32:26] ■ done          COMPLETED                         │  │
-│ │ [14:32:26] ─ session.stop                                    │  │
-│ └───────────────────────────────────────────────────────────────┘  │
+│ DETAIL PANEL (click any element)                                    │
+│ ┌───────────────────────────────────────────────────────────────┐   │
+│ │ Run: 6ba7b810…  Role: witness  Rig: fai  Agent: witness      │   │
+│ │ Started: 14:32:05  Duration: 1m42s  Cost: $0.3241            │   │
+│ │                                                               │   │
+│ │ [14:32:01] ● instantiate   claudecode/fai-witness             │   │
+│ │ [14:32:05] ─ session.start                                   │   │
+│ │ [14:32:06]   prime         polecat formula (2 KB)            │   │
+│ │ [14:32:06] ▶ prompt.send   "You have bead gt-abc…"          │   │
+│ │ [14:32:08] ◀ thinking      847 chars                         │   │
+│ │ [14:32:10] ◀ text          "I'll review the assigned bead…"  │   │
+│ │ [14:32:11] 🔧 tool_use     bd list --assignee=fai/witness    │   │
+│ │ [14:32:11]   bd.call       list (38ms) ✓                     │   │
+│ │ [14:32:11] ↩ tool_result   [{id:"bead-42"…}]                │   │
+│ │ [14:32:15] 🔧 tool_use     Bash "git diff HEAD~1"            │   │
+│ │ [14:32:18] ↩ tool_result   (320 lines)                       │   │
+│ │ [14:32:25] ◀ text          "The changes look correct…"       │   │
+│ │ [14:32:26] 🔧 tool_use     bd update bead-42 --status=done   │   │
+│ │ [14:32:26] ■ done          COMPLETED                         │   │
+│ │ [14:32:26] ─ session.stop                                    │   │
+│ └───────────────────────────────────────────────────────────────┘   │
 ├─────────────────────────────────────────────────────────────────────┤
-│ COMMUNICATION MAP (section collapsible)                            │
+│ COMMUNICATION MAP (collapsible section)                             │
 │                                                                     │
-│   mayor ──sling──▶ deacon ──mail──▶ witness                       │
-│     │                                    │                         │
+│   mayor ──sling──▶ deacon ──mail──▶ witness                        │
+│     │                                    │                          │
 │     └──────────── mail ◀─────────────────┘                         │
 │                                                                     │
-│   mayor ──spawn──▶ polecat/jana                                    │
-│     │               │                                              │
-│     └── nudge ──────┘                                              │
+│   mayor ──spawn──▶ polecat/jana                                     │
+│     │               │                                               │
+│     └── nudge ──────┘                                               │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Swim lanes — détail
+### Swim lanes — detail
 
-Chaque **run agent** (`agent.instantiate`) obtient une swim lane horizontale. Les lanes sont groupées par **rig**, avec des headers de rig collapsibles. Dans chaque lane :
+Each **agent run** (`agent.instantiate`) gets one horizontal swim lane. Lanes are grouped by **rig**, with collapsible rig headers. Inside each lane:
 
-1. **Barre de session** : barre colorée pleine largeur (couleur = rôle) de `session.start` à `session.stop` (ou maintenant si toujours en cours). Animation pulsante si en cours.
+1. **Session bar**: solid colour bar spanning the full width (colour = role) from `session.start` to `session.stop` (or now if still running). Pulsing animation if in progress.
 
-2. **Ticks API** : petites marques verticales sur la barre de session pour chaque `claude_code.api_request`. Intensité de couleur = coût. Hover : modèle, tokens, coût, durée.
+2. **API ticks**: small vertical marks on the session bar for each `claude_code.api_request`. Colour intensity = cost. Hover: model, tokens, cost, duration.
 
-3. **Markers outils** : marqueurs diamant sous la barre pour chaque `claude_code.tool_result`. Couleur = succès (vert) / échec (rouge). Hover : nom de l'outil, commande, durée.
+3. **Tool markers**: diamond markers below the bar for each `claude_code.tool_result`. Colour = success (green) / failure (red). Hover: tool name, command, duration.
 
-4. **Flèches inter-agents** : flèches horizontales entre lanes montrant les communications :
-   - **Sling** (dispatch bead) : flèche pleine, labelisée avec le bead ID
-   - **Mail** (send/deliver) : flèche ondulée, labelisée avec `msg.subject` ou `msg.from→msg.to`
-   - **Nudge** : flèche pointillée
-   - **Polecat spawn** : flèche épaisse vers la lane enfant
-   - **Done/escalate** : flèche retour vers le parent
+4. **Inter-agent arrows**: horizontal arrows between lanes showing communications:
+   - **Sling** (bead dispatch): solid arrow, labelled with the bead ID
+   - **Mail** (send/deliver): wavy arrow, labelled with `msg.subject` or `msg.from→msg.to`
+   - **Nudge**: dashed arrow
+   - **Polecat spawn**: thick arrow to the child lane
+   - **Done/escalate**: return arrow to the parent
 
-   > ⚠️ **Suggestion** : La V1 définissait un type `assign` (dérivé de `bd update --assignee`). Ce n'est pas un événement natif — c'est une heuristique. L'afficher comme `bd.call` avec `subcommand=update` et args contenant `--assignee`, pas comme un type de communication à part entière.
+   > **Note**: v1 defined an `assign` type (derived from `bd update --assignee`). This is not a native event — it is a heuristic. Show it as `bd.call` with `subcommand=update` and args containing `--assignee`, not as a first-class communication type.
 
-5. **Overlay lifecycle bead** : segments colorés optionnels sur les barres de session montrant quel bead est en cours de travail (depuis la corrélation des `bd.call` create/update).
+5. **Lifecycle bead overlay**: optional coloured segments on session bars showing which bead is currently being worked on (derived from `bd.call` create/update correlation).
 
-### Axe temps
+### Time axis
 
-- Axe temps horizontal partagé en haut, auto-scaling sur la fenêtre
-- Marques à intervalles sensibles (toutes les 10s, 30s, 1m, 5m, etc.)
-- Lignes de grille verticales (subtiles) pour l'alignement
-- Zoom : molette souris sur la zone timeline
-- Pan : clic-drag sur la zone timeline
-- Marqueur temps courant (si vue live/récente) : ligne verticale rouge
+- Shared horizontal time axis at the top, auto-scaled to the window
+- Tick marks at sensible intervals (every 10s, 30s, 1m, 5m, etc.)
+- Vertical grid lines (subtle) for alignment
+- Zoom: scroll wheel on the timeline area
+- Pan: click-drag on the timeline area
+- Current-time marker (if live/recent view): vertical red line
 
-### Filtres
+### Filters
 
-| Filtre | Type | Source |
+| Filter | Type | Source |
 |--------|------|--------|
-| Rig | multi-select dropdown | `rig` attribut sur `agent.instantiate` |
-| Role | multi-select dropdown | `role` : mayor, deacon, witness, refinery, polecat, dog, boot, crew |
-| Agent | multi-select dropdown | `agent_name` ou `session_id` |
+| Rig | multi-select dropdown | `rig` attribute on `agent.instantiate` |
+| Role | multi-select dropdown | `role`: mayor, deacon, witness, refinery, polecat, dog, boot, crew |
+| Agent | multi-select dropdown | `agent_name` or `session_id` |
 | Event types | checkbox group | Runs, API calls, Tool calls, BD calls, Slings, Mails, Nudges, Spawns |
-| Search | text input | Recherche plein-texte sur contenu, bead IDs, noms d'outils |
+| Search | text input | Full-text search on content, bead IDs, tool names |
 
-Les filtres sont URL query-param driven (`?rig=fai&role=witness&types=api,tool`) pour le partage de liens.
+Filters are URL query-param driven (`?rig=fai&role=witness&types=api,tool`) for link sharing.
 
-### Panneau de détail — Panel droit (style Chrome DevTools Network)
+### Detail panel — right panel (Chrome DevTools Network style)
 
-Cliquer sur une ligne du waterfall ouvre un **panneau latéral droit** qui s'affiche à côté du waterfall (layout split vertical, ~40% de la largeur), exactement comme le panneau de détail de Chrome DevTools Network. Le waterfall se redimensionne pour céder la place — il ne disparaît pas.
+Clicking any row in the waterfall opens a **right side panel** displayed alongside the waterfall (vertical split layout, ~40% of width), exactly like the Chrome DevTools Network detail panel. The waterfall resizes to make room — it does not disappear.
 
 ```
 ┌──────────────────────────┬──────────────────────────────────────┐
@@ -214,214 +220,237 @@ Cliquer sur une ligne du waterfall ouvre un **panneau latéral droit** qui s'aff
 │                          │  │ [BD Calls][Mails][Timeline]       ││
 │                          │  ├──────────────────────────────────┤│
 │                          │  │                                   ││
-│                          │  │  (contenu de l'onglet actif)      ││
+│                          │  │  (active tab content)             ││
 │                          │  │                                   ││
 │                          │  └──────────────────────────────────┘│
 └──────────────────────────┴──────────────────────────────────────┘
 ```
 
-#### Onglets du panneau (selon le type d'élément cliqué)
+#### Panel tabs (based on element clicked)
 
-**Clic sur une lane de run** → panneau run avec 6 onglets :
+**Click on a run lane** → run panel with 6 tabs:
 
-| Onglet | Contenu |
-|--------|---------|
-| **Overview** | Métadonnées : `run.id`, `role`, `rig`, `agent_name`, `agent_type`, `session_id`, `instance`, `started_at`, `ended_at`, durée, coût total, nombre d'events |
-| **Prompt** | Texte complet du ou des `prompt.send` reçus par l'agent (attribut `keys` si disponible, sinon `keys_len` + mention manquante). Police monospace, fond sombre, scrollable. Si le prompt contient du Markdown, le rendre. |
-| **Conversation** | Tous les `agent.event` du run, affichés en bulles de chat : `thinking` (lavande, italique), `assistant/text` (vert foncé, aligné droite), `user/text` (vert clair, aligné gauche), `tool_use` (ambre, bloc code), `tool_result` (bleu, bloc code). Contenu intégral, pas de troncature. Scrollable. |
-| **BD Calls** | Table de tous les `bd.call` : `time`, `subcommand`, `args`, `duration_ms`, `status`. Si `GT_LOG_BD_OUTPUT=true`, afficher `stdout` dans un `<details>` collapsible. |
-| **Mails** | Table de tous les `mail` events : `operation`, `msg.from`, `msg.to`, `msg.subject`, `msg.priority`. Corps complet (`msg.body`) dans un `<details>` collapsible. |
-| **Timeline** | Mini-waterfall du run uniquement : même vue horizontale que le waterfall global mais zoomée sur ce run seul, avec les sous-events imbriqués (voir §Nesting). |
+| Tab | Content |
+|-----|---------|
+| **Overview** | Metadata: `run.id`, `role`, `rig`, `agent_name`, `agent_type`, `session_id`, `instance`, `started_at`, `ended_at`, duration, total cost, event count |
+| **Prompt** | Full text of `prompt.send` received by the agent (`keys` attribute if available, otherwise `keys_len` + missing notice). Monospace, dark background, scrollable. Render Markdown if the prompt contains it. |
+| **Conversation** | All `agent.event` records for the run, shown as chat bubbles: `thinking` (lavender, italic), `assistant/text` (dark green, right-aligned), `user/text` (light green, left-aligned), `tool_use` (amber, code block), `tool_result` (blue, code block). Full content, no truncation. Scrollable. |
+| **BD Calls** | Table of all `bd.call` records: `time`, `subcommand`, `args`, `duration_ms`, `status`. If `GT_LOG_BD_OUTPUT=true`, show `stdout` in a collapsible `<details>`. |
+| **Mails** | Table of all `mail` events: `operation`, `msg.from`, `msg.to`, `msg.subject`, `msg.priority`. Full body (`msg.body`) in a collapsible `<details>`. |
+| **Timeline** | Mini-waterfall of this run only: same horizontal view as the global waterfall but zoomed to this run, with nested sub-events (see §Nesting). |
 
-**Clic sur un tick API** → panneau API avec 2 onglets :
+**Click on an API tick** → API panel with 2 tabs:
 
-| Onglet | Contenu |
-|--------|---------|
-| **Headers** | Modèle, `session.id`, timestamps, durée |
-| **Tokens** | Table : input / output / cache_read tokens, coût USD. Barre visuelle proportionnelle. |
+| Tab | Content |
+|-----|---------|
+| **Headers** | Model, `session.id`, timestamps, duration |
+| **Tokens** | Table: input / output / cache_read tokens, cost USD. Proportional visual bar. |
 
-**Clic sur un marker outil** → panneau Tool avec 2 onglets :
+**Click on a tool marker** → Tool panel with 2 tabs:
 
-| Onglet | Contenu |
-|--------|---------|
-| **Summary** | Nom de l'outil, durée, succès/échec, `session.id` |
-| **Parameters** | `tool_parameters` JSON formatté avec coloration syntaxique (JSON.stringify indent 2). |
+| Tab | Content |
+|-----|---------|
+| **Summary** | Tool name, duration, success/failure, `session.id` |
+| **Parameters** | `tool_parameters` JSON formatted with syntax highlighting (JSON.stringify indent 2). |
 
-**Clic sur une flèche communication** → panneau Comm avec 2 onglets :
+**Click on a communication arrow** → Comm panel with 2 tabs:
 
-| Onglet | Contenu |
-|--------|---------|
-| **Info** | Type (`sling`/`mail`/`nudge`/`spawn`/`done`), source, cible, timestamp, bead ID si applicable |
-| **Bead** | Pour `sling` : lifecycle complet du bead depuis `/bead/{id}` (table des transitions). Pour `mail` : corps complet `msg.body`. |
+| Tab | Content |
+|-----|---------|
+| **Info** | Type (`sling`/`mail`/`nudge`/`spawn`/`done`), source, target, timestamp, bead ID if applicable |
+| **Bead** | For `sling`: full bead lifecycle from `/bead/{id}` (state transition table). For `mail`: full `msg.body`. |
 
-#### Comportement du panneau
+#### Panel behaviour
 
-- **Ouverture** : slide-in depuis la droite, animation 150ms
-- **Fermeture** : bouton `✕` en haut à droite, ou touche `Escape`
-- **Redimensionnement** : drag sur le bord gauche du panneau (largeur entre 25% et 70%)
-- **Persistance de l'onglet actif** : mémorisé par type (run/api/tool/comm) pendant la session
-- **Navigation entre runs** : touches `↑` / `↓` pour passer au run précédent/suivant dans la liste sans fermer le panneau
-- **Lien externe** : bouton "Open in full view" → `/session/{session_id}` ou `/bead/{id}`
+- **Open**: slide-in from the right, 150ms animation
+- **Close**: `✕` button top-right, or `Escape` key
+- **Resize**: drag on the panel's left edge (width between 25% and 70%)
+- **Tab persistence**: active tab memorised per type (run/api/tool/comm) within the session
+- **Run navigation**: `↑` / `↓` keys to move to the previous/next run without closing the panel
+- **External link**: "Open in full view" button → `/session/{session_id}` or `/bead/{id}`
 
 ### Communication map
 
-Section collapsible sous le waterfall montrant un **node-link diagram** de toute la communication inter-agents dans la fenêtre :
+Collapsible section below the waterfall showing a **node-link diagram** of all inter-agent communication within the window:
 
-- Nœuds = agents (colorés par rôle)
-- Arêtes = événements de communication (slings, mails, spawns, nudges, dones)
-- Épaisseur de l'arête = fréquence
-- Label de l'arête = count + dernier bead ID ou subject mail
-- Survol d'un nœud : highlight de toutes ses arêtes de communication
-- Clic sur un nœud : filtre le waterfall sur cet agent
+- Nodes = agents (coloured by role)
+- Edges = communication events (slings, mails, spawns, nudges, dones)
+- Edge thickness = frequency
+- Edge label = count + last bead ID or mail subject
+- Hover on a node: highlight all its communication edges
+- Click on a node: filter the waterfall to that agent
 
-### Codes couleur
+### Colour coding
 
-| Événement | Couleur |
-|-----------|---------|
-| `agent.instantiate` | violet |
-| `session.start` / `session.stop` | gris |
-| `prime` / `prime.context` | bleu |
+| Event | Colour |
+|-------|--------|
+| `agent.instantiate` | purple |
+| `session.start` / `session.stop` | grey |
+| `prime` / `prime.context` | blue |
 | `prompt.send` | cyan |
-| `agent.event` thinking | lavande |
-| `agent.event` text assistant | vert foncé |
+| `agent.event` thinking | lavender |
+| `agent.event` text assistant | dark green |
 | `agent.event` tool_use | orange |
-| `agent.event` tool_result | orange clair |
-| `agent.event` user | vert |
-| `bd.call` | rouge |
-| `mail` | jaune |
-| `sling` / `nudge` | rose |
-| `done` COMPLETED | vert vif |
-| `done` ESCALATED / DEFERRED | orange vif |
-| statut `"error"` | bordure rouge vif |
+| `agent.event` tool_result | light orange |
+| `agent.event` user | green |
+| `bd.call` | red |
+| `mail` | yellow |
+| `sling` / `nudge` | pink |
+| `mol.cook` / `mol.wisp` | teal |
+| `mol.squash` / `mol.burn` | indigo |
+| `bead.create` | sky blue |
+| `done` COMPLETED | bright green |
+| `done` ESCALATED / DEFERRED | bright orange |
+| `status: "error"` | bright red border |
 
-### Règles de nesting (vue run detail)
+### Nesting rules (run detail view)
 
-Les logs OTel ne portant pas de parent span ID natif, la hiérarchie est reconstruite par :
-1. Groupement sur `run.id`
-2. Ordonnancement chronologique par `_time`
-3. Règles suivantes :
+OTel logs do not carry a native parent span ID; the hierarchy is reconstructed by:
+1. Grouping on `run.id`
+2. Chronological ordering by `_time`
+3. The following rules:
 
 ```
-agent.instantiate                    ← racine absolue (1 par run)
-  ├─ session.start                   ← cycle de vie tmux
-  ├─ prime                           ← injection contexte
+agent.instantiate                    ← absolute root (1 per run)
+  ├─ session.start                   ← tmux lifecycle
+  ├─ prime                           ← context injection
   ├─ prompt.send                     ← daemon → agent
   │
-  ├─ agent.event [user/text]         ← message texte reçu
-  ├─ agent.event [user/tool_result]  ← résultat d'outil reçu
+  ├─ agent.event [user/text]         ← received text message
+  ├─ agent.event [user/tool_result]  ← received tool result
   │
   ├─ agent.event [assistant/thinking]
   ├─ agent.event [assistant/text]
-  ├─ agent.event [assistant/tool_use]  ← appel outil
-  │    ↳ bd.call                         si tool = bd (fenêtre temporelle)
-  │    ↳ mail                            si tool = mail
-  │    ↳ sling                           si tool = gt sling
-  │    ↳ nudge                           si tool = gt nudge
+  ├─ agent.event [assistant/tool_use]  ← tool call
+  │    ↳ bd.call                         if tool = bd (time window)
+  │    ↳ mail                            if tool = mail
+  │    ↳ sling                           if tool = gt sling
+  │    ↳ nudge                           if tool = gt nudge
   │
-  ├─ done                            ← fin de travail
-  └─ session.stop                    ← fin lifecycle
+  ├─ mol.cook                        ← formula compilation
+  │    ↳ mol.wisp                       wisp instantiation
+  │         ↳ bead.create               child beads created
+  │
+  ├─ mol.squash / mol.burn           ← molecule lifecycle end
+  ├─ agent.state_change              ← state transition
+  ├─ done                            ← work item completed
+  └─ session.stop                    ← lifecycle end
 ```
 
-Tout événement sans parent inférable → affiché à plat.
+Any event without an inferable parent → shown flat.
 
 ---
 
 ## Implementation notes
 
-### Code existant à réutiliser
+### Existing code to reuse
 
-- `data.go` : `loadSessions()`, `loadBeadLifecycles()`, `loadAPIRequests()`, `loadToolCalls()`, `loadBDCalls()`, `loadFlowEvents()`, `loadPaneOutput()`, `correlateClaudeSessions()` — structs typés utilisables
-- `vl.go` : `vlQuery()` pour les requêtes VictoriaLogs, `extractStreamField()` pour parser les `_stream` attributes
-- `main.go` : pattern handler existant, template helpers (`roleColor`, `fmtTime`, `fmtDur`, `fmtCost`, etc.)
-- `waterfall.go` : `rigFromSession()`, `loadWaterfallData()` — partiellement réutilisable, refactoring profond nécessaire
+- `data.go`: `loadSessions()`, `loadBeadLifecycles()`, `loadAPIRequests()`, `loadToolCalls()`, `loadBDCalls()`, `loadFlowEvents()`, `loadPaneOutput()`, `correlateClaudeSessions()` — usable typed structs
+- `vl.go`: `vlQuery()` for VictoriaLogs queries, `extractStreamField()` for parsing `_stream` attributes
+- `main.go`: existing handler pattern, template helpers (`roleColor`, `fmtTime`, `fmtDur`, `fmtCost`, etc.)
+- `waterfall.go`: `rigFromSession()`, `loadWaterfallData()` — partially reusable, deep refactoring needed
 
-### Nouvelles données à charger
+### New data to load
 
-1. **Runs** : `vlQuery(cfg.LogsURL, "agent.instantiate", limit, since, end)` — champs : `run.id`, `instance`, `town_root`, `agent_type`, `role`, `agent_name`, `session_id`, `rig`
-2. **Slings** : `vlQuery(cfg.LogsURL, "sling", limit, since, end)` — champs : `run.id`, `bead`, `target`, `status`
-3. **Mails** : `vlQuery(cfg.LogsURL, "mail", limit, since, end)` — champs : `run.id`, `operation`, `msg.from`, `msg.to`, `msg.subject`, `msg.body`, `msg.thread_id`, `msg.priority`, `msg.type`, `status`
-4. **Nudges** : `vlQuery(cfg.LogsURL, "nudge", limit, since, end)` — champs : `run.id`, `target`, `status`
-5. **Spawns** : `vlQuery(cfg.LogsURL, "polecat.spawn", limit, since, end)` — champs : `run.id`, `name`, `status`
-6. **Dones** : `vlQuery(cfg.LogsURL, "done", limit, since, end)` — champs : `run.id`, `exit_type`, `status`
-7. **Prime** : `vlQuery(cfg.LogsURL, "prime", limit, since, end)` — champs : `run.id`, `role`, `formula`, `hook_mode`, `status`
+1. **Runs**: `vlQuery(cfg.LogsURL, "agent.instantiate", limit, since, end)` — fields: `run.id`, `instance`, `town_root`, `agent_type`, `role`, `agent_name`, `session_id`, `rig`
+2. **Slings**: `vlQuery(cfg.LogsURL, "sling", limit, since, end)` — fields: `run.id`, `bead`, `target`, `status`
+3. **Mails (send)**: `vlQuery(cfg.LogsURL, "mail AND operation:send", limit, since, end)` — fields: `run.id`, `operation`, `msg.from`, `msg.to`, `msg.subject`, `msg.body`, `msg.thread_id`, `msg.priority`, `msg.type`, `status`
+4. **Mails (all)**: `vlQuery(cfg.LogsURL, "mail", limit, since, end)` — general mail operations; run after the send query and dedup by event ID
+5. **Nudges**: `vlQuery(cfg.LogsURL, "nudge", limit, since, end)` — fields: `run.id`, `target`, `status`
+6. **Spawns**: `vlQuery(cfg.LogsURL, "polecat.spawn", limit, since, end)` — fields: `run.id`, `name`, `status`
+7. **Dones**: `vlQuery(cfg.LogsURL, "done", limit, since, end)` — fields: `run.id`, `exit_type`, `status`
+8. **Prime**: `vlQuery(cfg.LogsURL, "prime", limit, since, end)` — fields: `run.id`, `role`, `formula`, `hook_mode`, `status`
+9. **Mol lifecycle**: `vlQuery(cfg.LogsURL, "mol.cook", ...)`, `vlQuery(cfg.LogsURL, "mol.wisp", ...)`, `vlQuery(cfg.LogsURL, "mol.squash", ...)`, `vlQuery(cfg.LogsURL, "mol.burn", ...)` — fields per event (see Data Sources table)
+10. **Bead creation**: `vlQuery(cfg.LogsURL, "bead.create", limit, since, end)` — fields: `run.id`, `bead_id`, `parent_id`, `mol_source`
 
-> ⚠️ **Suggestion** : Requêter d'abord les `agent.instantiate` pour obtenir tous les `run.id` de la fenêtre, puis requêter tous les events avec `run.id:<uuid1> OR run.id:<uuid2> OR …` pour éviter N+1 requêtes. Voir `waterfall-spec.md §4.1`.
+> **Suggestion**: query `agent.instantiate` first to get all `run.id`s in the window, then query all events with `run.id:<uuid1> OR run.id:<uuid2> OR …` to avoid N+1 queries. See `waterfall-spec.md §4.1`.
 
-### Pipeline de données
+### Data pipeline
 
 ```
 loadWaterfallV2Data(cfg, since, filters) →
-  1. Load agent.instantiate  → liste des runs → group by rig
-  2. Load session.start/stop → durées des runs
-  3. Load prime              → contexte de démarrage par run
+  1. Load agent.instantiate  → run list → group by rig
+  2. Load session.start/stop → run durations
+  3. Load prime              → startup context per run
   4. Load API requests       → assign to runs via correlateClaudeSessions() + run.id
   5. Load tool calls         → assign to runs via session.id
   6. Load agent events       → assign to runs via native_session_id + run.id
-  7. Load BD calls           → extraire slings, assigns, creates
-  8. Load slings/mails       → construire les arêtes de communication (source run → target)
-  9. Load spawns/dones       → construire les arêtes de lifecycle
-  10. Compute time axis      → min(started_at) to max(ended_at or now)
-  11. Apply filters          → rig, role, agent, event type
-  12. Serialize to JSON      → send to frontend for rendering
+  7. Load BD calls           → extract slings, assigns, creates
+  8. Load slings/mails       → build communication edges (source run → target)
+  9. Load spawns/dones       → build lifecycle edges
+  10. Load mol.* / bead.create → attach to runs by run.id
+  11. Compute time axis      → min(started_at) to max(ended_at or now)
+  12. Apply filters          → rig, role, agent, event type
+  13. Serialize to JSON      → send to frontend for rendering
 ```
 
-### Requêtes VictoriaLogs
+### VictoriaLogs queries
 
 ```
-# Tous les runs récents (vue instance)
+# All recent runs (instance view)
 GET /select/logsql/query?query=_msg:agent.instantiate AND instance:laptop:gt AND _time:[now-1h,now]&limit=100
 
-# Tous les events d'un run
+# All events for a run
 GET /select/logsql/query?query=run.id:<uuid>&limit=10000
 
-# Filtrer par rig
+# Filter by rig
 GET /select/logsql/query?query=_msg:agent.instantiate AND rig:fai
 
-# Filtrer par rôle
+# Filter by role
 GET /select/logsql/query?query=_msg:agent.instantiate AND role:polecat
+
+# Mol lifecycle for a run
+GET /select/logsql/query?query=(mol.cook OR mol.wisp OR mol.squash OR mol.burn OR bead.create) AND run.id:<uuid>
+
+# Mail send events (targeted query to avoid limit cutoff)
+GET /select/logsql/query?query=mail AND operation:send&limit=500
 ```
 
 ### Frontend rendering
 
-Le waterfall DOIT être rendu côté client (JavaScript + Canvas ou SVG) pour l'interactivité (zoom, pan, hover, clic). Le handler Go sert :
+The waterfall MUST be rendered client-side (JavaScript + Canvas or SVG) for interactivity (zoom, pan, hover, click). The Go handler serves:
 
-1. Une page HTML avec le shell (nav, filtres, summary cards, panneau de détail)
-2. Un bloc `<script>` avec les données waterfall en JSON : `const DATA = {{.JSONData}};`
-3. Le JavaScript qui rend le waterfall dans un container `<canvas>` ou SVG
+1. An HTML page with the shell (nav, filters, summary cards, detail panel)
+2. A `<script>` block with waterfall data as JSON: `const DATA = {{.JSONData}};`
+3. JavaScript that renders the waterfall in a `<canvas>` or SVG container
 
-Utiliser Canvas pour la performance (centaines d'events). SVG convient pour la communication map.
+Use Canvas for performance (hundreds of events). SVG is appropriate for the communication map.
 
 ### API endpoint
 
-Ajouter `GET /api/waterfall.json?window=24h&rig=fai&role=witness` qui retourne les données structurées en JSON. Cela permet :
-- La page `/waterfall` de fetcher les données dynamiquement (changements de filtre sans rechargement complet)
-- Un frontend séparé peut consommer la même API
+Add `GET /api/waterfall.json?window=24h&rig=fai&role=witness` returning the structured JSON data. This allows:
+- The `/waterfall` page to fetch data dynamically (filter changes without full reload)
+- A separate frontend to consume the same API
 
 ### JSON shape
 
 ```typescript
 interface WaterfallEvent {
-  id:        string;       // ID interne VictoriaLogs
-  run_id:    string;       // UUID run GASTOWN (GT_RUN)
-  body:      string;       // nom d'événement ("bd.call", "agent.event", "mail", …)
+  id:        string;       // VictoriaLogs internal ID
+  run_id:    string;       // GASTOWN run UUID (GT_RUN)
+  body:      string;       // event name ("bd.call", "agent.event", "mail", "mol.cook", …)
   timestamp: string;       // RFC3339
   severity:  "info" | "error";
   attrs: {
-    // Présents sur tous les événements
+    // Present on all events
     instance?:          string;
     town_root?:         string;
     session_id?:        string;
     rig?:               string;
-    role?:              string;   // rôle Gastown sur agent.instantiate/session.*
-                                  // rôle LLM ("assistant"/"user") sur agent.event
+    role?:              string;   // Gastown role on agent.instantiate/session.*
+                                  // LLM role ("assistant"/"user") on agent.event
     agent_type?:        string;
     agent_name?:        string;
     status?:            string;
     // agent.event
     event_type?:        string;
-    "agent.role"?:      string;  // "assistant" | "user" (LLM role, alias de role sur agent.event)
-    content?:           string;  // contenu intégral — aucune troncature
+    "agent.role"?:      string;  // "assistant" | "user" (LLM role, alias of role on agent.event)
+    content?:           string;  // full content — no truncation
     native_session_id?: string;
+    // agent.state_change
+    agent_id?:          string;
+    new_state?:         string;
+    hook_bead?:         string;  // bead ID being processed; empty string if none
     // bd.call
     subcommand?:        string;
     args?:              string;
@@ -433,7 +462,7 @@ interface WaterfallEvent {
     "msg.from"?:        string;
     "msg.to"?:          string;
     "msg.subject"?:     string;
-    "msg.body"?:        string;  // corps complet — aucune troncature
+    "msg.body"?:        string;  // full body — no truncation
     "msg.thread_id"?:   string;
     "msg.priority"?:    string;
     "msg.type"?:        string;
@@ -445,6 +474,18 @@ interface WaterfallEvent {
     target?:            string;
     // done
     exit_type?:         string;
+    // mol lifecycle
+    formula_name?:      string;
+    wisp_root_id?:      string;
+    bead_id?:           string;
+    mol_id?:            string;
+    done_steps?:        number;
+    total_steps?:       number;
+    digest_created?:    boolean;
+    children_closed?:   number;
+    // bead.create
+    parent_id?:         string;
+    mol_source?:        string;
     [key: string]:      unknown;
   };
 }
@@ -459,10 +500,10 @@ interface WaterfallRun {
   session_id:  string;
   rig:         string;
   started_at:  string;
-  ended_at?:   string;      // présent si session.stop reçu
+  ended_at?:   string;      // present if session.stop received
   duration_ms?: number;
   running:     boolean;
-  cost?:       number;      // depuis claude_code.api_request
+  cost?:       number;      // from claude_code.api_request
   events:      WaterfallEvent[];
 }
 
@@ -486,11 +527,11 @@ interface WaterfallInstance {
   communications: Array<{
     time:      string;
     type:      "sling" | "mail" | "nudge" | "spawn" | "done";
-    from:      string;   // run_id ou actor (rig/role)
+    from:      string;   // run_id or actor (rig/role)
     to:        string;
     beadID?:   string;
     label:     string;
-    // mail seulement
+    // mail only
     subject?:  string;
     body?:     string;
   }>;
@@ -507,94 +548,98 @@ interface WaterfallInstance {
 }
 ```
 
-> ⚠️ **Incohérence résolue** : La V1 avait `rigs > lanes > apiCalls/toolCalls/agentEvents` (séparation artificielle). La nouvelle shape normalise tout comme `WaterfallEvent[]` dans chaque `WaterfallRun`, aligné avec la référence TypeScript. Les `apiCalls` et `toolCalls` issus de `claude_code.*` restent séparés dans `events` avec leur `body` spécifique.
+> **Note**: v1 had `rigs > lanes > apiCalls/toolCalls/agentEvents` (artificial separation). The new shape normalises everything as `WaterfallEvent[]` inside each `WaterfallRun`, aligned with the TypeScript reference. `apiCalls` and `toolCalls` from `claude_code.*` remain separate in `events` with their specific `body`.
 
-> ⚠️ **Suggestion** : Le type `"assign"` dans `communications` (V1) est supprimé — il n'existe pas comme événement natif. L'assignation d'un bead à un agent via `bd update --assignee` est visible dans `bd.call` events, pas en tant que communication inter-agents.
+> **Note**: The `"assign"` type in `communications` (v1) is removed — it does not exist as a native event. Bead assignment via `bd update --assignee` is visible in `bd.call` events, not as inter-agent communication.
 
 ---
 
-## Variables d'environnement
+## Environment variables
 
-| Variable | Où positionné | Rôle |
-|----------|--------------|------|
-| `GT_RUN` | env tmux session + subprocess | UUID run, clé waterfall |
-| `GT_OTEL_LOGS_URL` | démarrage daemon | endpoint VictoriaLogs OTLP |
-| `GT_OTEL_METRICS_URL` | démarrage daemon | endpoint VictoriaMetrics OTLP |
-| `GT_LOG_AGENT_OUTPUT` | opérateur | opt-in streaming JSONL Claude |
-| `GT_LOG_BD_OUTPUT` | opérateur | opt-in contenu bd stdout/stderr |
-| `GT_LOG_PANE_OUTPUT` | opérateur | opt-in sortie brute pane tmux |
+| Variable | Set by | Role |
+|----------|--------|------|
+| `GT_RUN` | tmux session env + subprocess | run UUID, waterfall correlation key |
+| `GT_OTEL_LOGS_URL` | daemon startup | VictoriaLogs OTLP endpoint |
+| `GT_OTEL_METRICS_URL` | daemon startup | VictoriaMetrics OTLP endpoint |
+| `GT_LOG_AGENT_OUTPUT` | operator | opt-in Claude JSONL streaming |
+| `GT_LOG_BD_OUTPUT` | operator | opt-in bd stdout/stderr content |
+| `GT_LOG_PANE_OUTPUT` | operator | opt-in raw tmux pane output |
 
-`GT_RUN` est surfacé en `gt.run_id` dans `OTEL_RESOURCE_ATTRIBUTES` pour tous les subprocessus `bd`, corrélant leur télémétrie au run parent.
+`GT_RUN` is surfaced as `gt.run_id` in `OTEL_RESOURCE_ATTRIBUTES` for all `bd` sub-processes, correlating their telemetry to the parent run.
 
 ---
 
 ## Interactions
 
-| Action | Résultat |
-|--------|----------|
-| Hover sur barre de session | Tooltip léger : run.id (8 chars), role, rig, durée, coût |
-| **Clic sur une lane (run)** | **Panneau droit slide-in : onglets Overview / Prompt / Conversation / BD Calls / Mails / Timeline** |
-| Hover sur tick API | Tooltip : modèle, tokens, coût, latence |
-| **Clic sur tick API** | **Panneau droit : onglets Headers / Tokens** |
-| Hover sur marker outil | Tooltip : nom de l'outil, durée, succès |
-| **Clic sur marker outil** | **Panneau droit : onglets Summary / Parameters (JSON formatté)** |
-| Hover sur flèche communication | Highlight lanes source + cible, label comm |
-| **Clic sur flèche communication** | **Panneau droit : onglets Info / Bead ou Info / Mail (corps complet)** |
-| Molette sur timeline | Zoom in/out centré sur le curseur |
-| Clic-drag sur timeline | Pan gauche/droite |
-| Clic header rig | Collapse/expand groupe rig |
-| Clic nœud dans comm map | Filtre le waterfall sur cet agent |
-| Touche `Escape` | Ferme le panneau droit |
-| Touches `↑` / `↓` (panneau ouvert) | Run précédent / suivant sans fermer le panneau |
-| Drag bord gauche du panneau | Redimensionne la largeur (25%–70%) |
-| Bouton "Open in full view" | Navigue vers `/session/{session_id}` ou `/bead/{id}` |
+| Action | Result |
+|--------|--------|
+| Hover over session bar | Lightweight tooltip: run.id (8 chars), role, rig, duration, cost |
+| **Click on a lane (run)** | **Right panel slides in: Overview / Prompt / Conversation / BD Calls / Mails / Timeline tabs** |
+| Hover over API tick | Tooltip: model, tokens, cost, latency |
+| **Click on API tick** | **Right panel: Headers / Tokens tabs** |
+| Hover over tool marker | Tooltip: tool name, duration, success |
+| **Click on tool marker** | **Right panel: Summary / Parameters (formatted JSON) tabs** |
+| Hover over communication arrow | Highlight source + target lanes, comm label |
+| **Click on communication arrow** | **Right panel: Info / Bead or Info / Mail (full body) tabs** |
+| Scroll wheel on timeline | Zoom in/out centred on cursor |
+| Click-drag on timeline | Pan left/right |
+| Click rig header | Collapse/expand rig group |
+| Click node in comm map | Filter waterfall to that agent |
+| `Escape` key | Close right panel |
+| `↑` / `↓` keys (panel open) | Previous / next run without closing panel |
+| Drag panel left edge | Resize panel width (25%–70%) |
+| "Open in full view" button | Navigate to `/session/{session_id}` or `/bead/{id}` |
 
 ---
 
 ## Non-goals (v1)
 
-- Real-time streaming (SSE/WebSocket) — utiliser `/live-view` pour ça
-- État éditable (pas de mise à jour de beads depuis cette vue)
-- Diff historique (comparer deux fenêtres temporelles)
-- Layout mobile
+- Real-time streaming (SSE/WebSocket) — use `/live-view` for that
+- Editable state (no bead updates from this view)
+- Historical diff (comparing two time windows)
+- Mobile layout
 
 ---
 
 ## Acceptance criteria
 
-1. `/waterfall` rend une timeline Canvas horizontale avec swim lanes groupées par rig
-2. Chaque swim lane correspond à un `run.id` issu de `agent.instantiate`
-3. Tous les filtres actifs se reflètent dans les URL query params et persistent au rechargement
-4. **Clic sur une lane ouvre le panneau droit (split vertical) avec les 6 onglets**
-5. **L'onglet Prompt affiche le texte complet du `prompt.send` (`keys`) en monospace, non tronqué**
-6. **L'onglet Conversation affiche tous les `agent.event` en bulles de chat, contenu intégral**
-7. **L'onglet BD Calls liste tous les `bd.call` avec `stdout` collapsible**
-8. **L'onglet Mails liste tous les `mail` avec `msg.body` collapsible**
-9. **Le panneau se redimensionne par drag sur son bord gauche**
-10. **Touches `↑`/`↓` naviguent entre runs sans fermer le panneau**
-11. Les flèches de communication inter-agents se rendent entre les bonnes swim lanes
-12. Zoom/pan fonctionne fluidement pour jusqu'à 50 runs et 5000 events
-13. `/api/waterfall.json` retourne les données structurées complètes
-14. La section communication map rend un node-link diagram lisible
-15. Thème sombre cohérent avec les pages gastown-trace existantes
+1. `/waterfall` renders a horizontal Canvas timeline with swim lanes grouped by rig
+2. Each swim lane corresponds to a `run.id` from `agent.instantiate`
+3. All active filters are reflected in URL query params and persist on reload
+4. **Click on a lane opens the right panel (vertical split) with all 6 tabs**
+5. **Prompt tab shows full `prompt.send` text (`keys`) in monospace, untruncated**
+6. **Conversation tab shows all `agent.event` records as chat bubbles, full content**
+7. **BD Calls tab lists all `bd.call` records with collapsible `stdout`**
+8. **Mails tab lists all `mail` events with collapsible `msg.body`**
+9. **Panel is resizable by dragging its left edge**
+10. **`↑`/`↓` keys navigate between runs without closing the panel**
+11. Inter-agent communication arrows render between the correct swim lanes
+12. Zoom/pan works smoothly for up to 50 runs and 5000 events
+13. `/api/waterfall.json` returns complete structured data
+14. Communication map section renders a readable node-link diagram
+15. Dark theme consistent with existing gastown-trace pages
 
 ---
 
-## Statut d'implémentation (référence : waterfall-spec.md §7)
+## Implementation status (reference: waterfall-spec.md §7)
 
-| Composant | Statut |
+| Component | Status |
 |-----------|--------|
-| `run.id` généré au spawn (lifecycle, polecat, witness, refinery) | ✅ |
-| `GT_RUN` propagé env tmux + subprocess `agent-log` | ✅ |
-| `GT_RUN` dans `OTEL_RESOURCE_ATTRIBUTES` pour bd | ✅ |
-| `run.id` injecté dans chaque événement OTel | ✅ |
-| `agent.instantiate` avec `instance`, `role`, `town_root` | ✅ |
-| `RecordMailMessage` avec contenu complet | ✅ (appels à ajouter dans `mail/`) |
-| Contenu `agent.event` sans troncature | ✅ |
-| Contenu bd stdout/stderr sans troncature | ✅ |
-| Texte complet du prompt dans `prompt.send` (attribut `keys`) | ⬜ P1 |
-| `RecordMailMessage` appelé depuis `mail/router` + `delivery` | ⬜ P2 |
-| Bead ID du travail dans `agent.instantiate` | ⬜ P2 |
-| Token usage depuis JSONL Claude | ⬜ P3 |
-| **Panneau droit avec onglets (Overview/Prompt/Conversation/BD/Mails/Timeline)** | ⬜ à implémenter |
-| Frontend waterfall v2 (base) | ✅ implémenté |
+| `run.id` generated at spawn (lifecycle, polecat, witness, refinery) | ✅ |
+| `GT_RUN` propagated via tmux env + subprocess `agent-log` | ✅ |
+| `GT_RUN` in `OTEL_RESOURCE_ATTRIBUTES` for bd | ✅ |
+| `run.id` injected into every OTel event | ✅ |
+| `agent.instantiate` with `instance`, `role`, `town_root` | ✅ |
+| `RecordMailMessage` with full content | ✅ (call sites added in `mail/`) |
+| `agent.event` content without truncation | ✅ |
+| bd stdout/stderr without truncation | ✅ |
+| `agent.state_change` with `hook_bead: string` (replaces `has_hook_bead: bool`) | ✅ |
+| `mol.cook` / `mol.wisp` recorder functions + metric counters | ✅ |
+| `mol.squash` / `mol.burn` recorder functions | ✅ |
+| `bead.create` recorder function | ✅ |
+| Full prompt text in `prompt.send` (`keys` attribute) | ⬜ P1 |
+| `RecordMailMessage` called from `mail/router` + `delivery` | ⬜ P2 |
+| Bead ID of work item in `agent.instantiate` | ⬜ P2 |
+| Token usage from Claude JSONL | ⬜ P3 |
+| **Right panel with tabs (Overview/Prompt/Conversation/BD/Mails/Timeline)** | ⬜ to implement |
+| Frontend waterfall v2 (base) | ✅ implemented |

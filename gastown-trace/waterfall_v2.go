@@ -401,6 +401,7 @@ func loadWaterfallV2(cfg *Config, winStart, winEnd time.Time) (*WV2Data, error) 
 
 	// 3. Load events by type.
 	var comms []WV2Comm
+	seenEventIDs := map[string]bool{} // dedup across queries (e.g. mail send events appear in both specialised + generic query)
 	eventQueries := []struct {
 		query  string
 		isComm bool
@@ -410,6 +411,7 @@ func loadWaterfallV2(cfg *Config, winStart, winEnd time.Time) (*WV2Data, error) 
 		{"agent.event", false},
 		{"bd.call", false},
 		{"sling", true},
+		{"mail AND operation:send", true}, // ensure send events are captured before general mail limit kicks in
 		{"mail", true},
 		{"nudge", true},
 		{"polecat.spawn", true},
@@ -422,6 +424,11 @@ func loadWaterfallV2(cfg *Config, winStart, winEnd time.Time) (*WV2Data, error) 
 	for _, q := range eventQueries {
 		evs, _ := vlQuery(cfg.LogsURL, q.query, limit, winStart, winEnd)
 		for _, ev := range evs {
+			evID := ev.Str("_time") + "|" + ev.Str("run.id")
+			if seenEventIDs[evID] {
+				continue
+			}
+			seenEventIDs[evID] = true
 			run := findRun(runMap, sessToRun, ev)
 			if run == nil {
 				continue
@@ -437,7 +444,23 @@ func loadWaterfallV2(cfg *Config, winStart, winEnd time.Time) (*WV2Data, error) 
 		}
 	}
 
-	// 4. Correlate claude_code.api_request / tool_result to runs by time proximity.
+	// Build native_session_id → run_id map from agent.event records already loaded.
+	// agent.event records carry both run.id (Gastown) and native_session_id (Claude session UUID),
+	// which matches session.id on claude_code.* events — enabling direct correlation.
+	nativeToRun := map[string]string{}
+	for runID, run := range runMap {
+		for _, ev := range run.Events {
+			if ev.Body == "agent.event" {
+				if nsid := ev.Attrs["native_session_id"]; nsid != "" {
+					nativeToRun[nsid] = runID
+				}
+			}
+		}
+	}
+
+	// 4. Correlate claude_code.api_request / tool_result to runs.
+	// Primary: direct match via native_session_id from agent.event records.
+	// Fallback: time proximity within the run's active window.
 	claudeToRun := map[string]string{}
 	apiEvs, _ := vlQuery(cfg.LogsURL, "claude_code.api_request", limit, winStart, winEnd)
 	for _, aev := range apiEvs {
@@ -445,6 +468,12 @@ func loadWaterfallV2(cfg *Config, winStart, winEnd time.Time) (*WV2Data, error) 
 		if csid == "" || claudeToRun[csid] != "" {
 			continue
 		}
+		// Direct match via native_session_id.
+		if runID := nativeToRun[csid]; runID != "" {
+			claudeToRun[csid] = runID
+			continue
+		}
+		// Fallback: time proximity.
 		apiT := aev.Time()
 		var best string
 		var bestDiff time.Duration = 5 * time.Minute

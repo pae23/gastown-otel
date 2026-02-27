@@ -101,7 +101,10 @@ const tmplWaterfallV2 = `
           <th style="width:72px">Rig</th>
           <th style="width:80px">Role</th>
           <th style="width:110px">Agent</th>
+          <th style="width:120px">From</th>
+          <th style="width:100px">To</th>
           <th>Detail</th>
+          <th style="width:58px">Cost</th>
           <th style="width:54px">Dur</th>
           <th style="width:110px">Waterfall</th>
         </tr>
@@ -279,7 +282,10 @@ function renderTable(){
       +'<td class="mono dim" style="font-size:10px">'+esc(row.rigName||'')+'</td>'
       +'<td><span style="color:'+rc(run.role)+';font-size:10px;font-family:monospace">'+esc(run.role||'')+'</span></td>'
       +'<td class="mono" title="'+esc(run.agent_name||run.role||'')+'"><span style="color:'+rc(run.role)+'">'+esc(agentLabel)+'</span></td>'
+      +'<td class="mono dim" style="font-size:10px" title="'+esc((ev.attrs&&ev.attrs['msg.from'])||'')+'">'+esc(((ev.attrs&&ev.attrs['msg.from'])||'').substring(0,22))+'</td>'
+      +'<td class="mono dim" style="font-size:10px" title="'+esc((ev.attrs&&ev.attrs['msg.to'])||'')+'">'+esc(((ev.attrs&&ev.attrs['msg.to'])||'').substring(0,18))+'</td>'
       +'<td class="mono">'+evDetail(ev)+'</td>'
+      +'<td class="mono dim" style="font-size:10px;text-align:right">'+(ev.attrs&&ev.attrs.cost_usd?'$'+parseFloat(ev.attrs.cost_usd).toFixed(4):'')+'</td>'
       +'<td class="mono dim" style="font-size:10px">'+dur+'</td>'
       +'<td>'+makeWfBar(ev,range)+'</td>'
       +'</tr>';
@@ -331,7 +337,12 @@ function evDetail(ev){
   if(ev.body==='agent.event')             return esc((a.content||'').substring(0,120));
   if(ev.body==='bd.call')                 return esc(((a.subcommand||'')+' '+(a.args||'')).substring(0,100));
   if(ev.body==='claude_code.api_request') return esc((a.model||'')+' in:'+(a.input_tokens||0)+' out:'+(a.output_tokens||0)+' $'+parseFloat(a.cost_usd||0).toFixed(4));
-  if(ev.body==='claude_code.tool_result') return esc((a.tool_name||'')+' '+(a.success!=='false'?'✓':'✗')+' '+fmtMs(parseFloat(a.duration_ms||0)));
+  if(ev.body==='claude_code.tool_result'){
+    var tname=a.tool_name||''; var ok=a.success!=='false';
+    var extra='';
+    if(a.tool_parameters){try{var tp=JSON.parse(a.tool_parameters);extra=tp.full_command||tp.skill_name||'';}catch(e){}}
+    return esc(tname+' '+(ok?'✓':'✗')+' '+fmtMs(parseFloat(a.duration_ms||0))+(extra?' — '+extra.substring(0,80):''));
+  }
   if(ev.body==='mail')                    return esc(((a.operation||'')+' '+(a['msg.from']||'')+' → '+(a['msg.to']||'')+': '+(a['msg.subject']||'')).substring(0,100));
   if(ev.body==='prompt.send')             return esc((a.keys_len||0)+' bytes'+(a.keys?' — '+a.keys.substring(0,60):''));
   if(ev.body==='done')                    return esc(a.exit_type||'');
@@ -362,6 +373,14 @@ function showDetail(row){
   html+='<tr><th>Run ID</th><td class="mono" style="font-size:9px;word-break:break-all">'+esc(run.run_id||'—')+'</td></tr>';
   if(run.session_id) html+='<tr><th>Session</th><td class="mono" style="font-size:9px;word-break:break-all">'+esc(run.session_id)+'</td></tr>';
   if(ev.severity==='error') html+='<tr><th>Severity</th><td style="color:#ef4444">error</td></tr>';
+  // For tool_result: surface full_command / skill_name prominently
+  if(ev.body==='claude_code.tool_result' && attrs.tool_parameters){
+    try{
+      var tp=JSON.parse(attrs.tool_parameters);
+      if(tp.full_command) html+='<tr><th>full_command</th><td class="mono" style="font-size:10px;color:#f59e0b;word-break:break-all">'+esc(tp.full_command)+'</td></tr>';
+      if(tp.skill_name)   html+='<tr><th>skill_name</th><td class="mono" style="font-size:10px;color:#8b5cf6">'+esc(tp.skill_name)+'</td></tr>';
+    }catch(e){}
+  }
   html+='</table>';
 
   // OTel attributes
